@@ -24,6 +24,7 @@ async function loadCustomItemApi() {
       categories: () => Array.from(db.pricing.customScrapboardCategories || []),
       customItems: () => Array.from(db.pricing.customScrapboardItems || [], item => ({ ...item })),
       catalog: () => Array.from(scrapboardItems(), item => ({ ...item })),
+      renderRates: () => renderRates(),
       addCategory: value => addScrapboardCategory(value),
       addItem: (category, name, unit, rate) => addScrapboardItem(category, name, unit, rate)
     };`, context);
@@ -86,4 +87,39 @@ test('failed shared-state save rolls back a category or item', async () => {
   assert.equal(await api.addCategory('Unsaved Category'), false);
   assert.deepEqual([...api.categories()], []);
   assert.equal(api.customItems().length, 0);
+});
+
+test('Daily Rates shows Quick Add only to administrators', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  const adminHtml = api.renderRates();
+  assert.match(adminHtml, /Quick add/);
+  assert.match(adminHtml, />Add category</);
+  assert.match(adminHtml, />Add item</);
+
+  api.setStaff();
+  const staffHtml = api.renderRates();
+  assert.doesNotMatch(staffHtml, /Quick add|Add category|Add item/);
+});
+
+test('new custom item renders as a Daily Rates card in its category', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  await api.addCategory('Charging Parts');
+  await api.addItem('Charging Parts', 'Type-C Port', 'pc', 12);
+
+  const html = api.renderRates();
+  assert.match(html, /<h3>Charging Parts<\/h3>/);
+  assert.match(html, />Type-C Port</);
+  assert.match(html, /peso \/ pc/);
+  assert.match(html, /value="12"/);
+});
+
+test('site palette uses grey white and light green low-contrast colors', async () => {
+  const source = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  assert.match(source, /--paper:#f7f8f7/);
+  assert.match(source, /--paper-2:#f1f4f2/);
+  assert.match(source, /--brass:#9ab8a5/);
+  assert.match(source, /--brass-bright:#c9ddcf/);
+  assert.match(source, /--ink:#34413d/);
 });

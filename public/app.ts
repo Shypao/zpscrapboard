@@ -1011,7 +1011,7 @@ function renderStaffRates(){
   </section>`;
 }
 function scrapboardRateGroups(){
-  return SCRAPBOARD_ITEMS.reduce((groups,item)=>{
+  return scrapboardItems().reduce((groups,item)=>{
     if(!groups[item.group]) groups[item.group]=[];
     groups[item.group].push(item);
     return groups;
@@ -1024,6 +1024,10 @@ function renderRates(){
     <div><div class="eyebrow">SCRAPBOARD BUYING GUIDE</div><h2>Daily buying rates</h2><p>These are the active prices used automatically on the Buying page. Rates marked / kg use kilograms; rates marked / pc use individual pieces.</p></div>
     <div class="scrap-rate-date"><small>Effective date</small><br><strong>${fmtDate(db.pricing.effectiveDate||todayStr())}</strong></div>
   </section>
+  ${isAdmin()?`<section class="scrap-quick-add"><div><div class="eyebrow">Quick add</div><h2>Add categories and buying items</h2><p>New items are saved to the shared rate list and appear automatically on the Buying page.</p></div><div class="scrap-quick-add-grid">
+    <div class="scrap-quick-add-form"><h3>New category</h3><div class="field"><label for="quick_add_category_name">Category name</label><input id="quick_add_category_name" maxlength="80" placeholder="e.g. Charger boards"></div><button class="btn secondary small" type="button" onclick="submitScrapboardCategory()">Add category</button></div>
+    <div class="scrap-quick-add-form"><h3>New item</h3><div class="field"><label for="quick_add_item_category">Category</label><select id="quick_add_item_category">${scrapboardCategories().map(category=>`<option value="${esc(category)}">${esc(category)}</option>`).join('')}</select></div><div class="field"><label for="quick_add_item_name">Item name</label><input id="quick_add_item_name" maxlength="100" placeholder="e.g. Type-C port"></div><div class="scrap-quick-add-row"><div class="field"><label for="quick_add_item_unit">Unit</label><select id="quick_add_item_unit"><option value="kg">kg</option><option value="pc">pc</option></select></div><div class="field"><label for="quick_add_item_rate">Starting rate</label><input id="quick_add_item_rate" type="number" min="1" step="1" placeholder="0"></div></div><button class="btn secondary small" type="button" onclick="submitScrapboardItem()">Add item</button></div>
+  </div></section>`:''}
   ${Object.entries(groups).map(([group,items])=>`<section class="scrap-rate-section"><h3>${esc(group)}</h3><div class="scrap-rate-grid">
     ${items.map(item=>`<div class="scrap-rate-card"><div><label for="scrap_rate_${item.key}">${esc(item.label)}</label><small>Philippine peso / ${item.unit}</small></div><div class="scrap-rate-input"><span>₱</span><input id="scrap_rate_${item.key}" type="number" min="1" step="1" value="${roundPeso(db.pricing.scrapboardRates?.[item.key]||item.rate)}" ${editable?'':'readonly aria-readonly="true"'}></div></div>`).join('')}
   </div></section>`).join('')}
@@ -1032,7 +1036,7 @@ function renderRates(){
 async function saveScrapboardRates(){
   if(!canEditDailyRates()){toast('Daily rates are locked by the administrator');return;}
   const next={};
-  for(const item of SCRAPBOARD_ITEMS){
+  for(const item of scrapboardItems()){
     const rate=roundPeso(Number(val(`scrap_rate_${item.key}`)));
     if(!Number.isFinite(rate)||rate<=0){toast(`Enter a valid rate for ${item.label}`);document.getElementById(`scrap_rate_${item.key}`)?.focus();return;}
     next[item.key]=rate;
@@ -1040,6 +1044,21 @@ async function saveScrapboardRates(){
   db.pricing.scrapboardRates=next;
   db.pricing.effectiveDate=todayStr();
   if(await savePricingDB()){render();toast('Scrapboard daily rates saved');}
+}
+async function submitScrapboardCategory(){
+  const input=document.getElementById('quick_add_category_name'),name=normalizedCatalogName(input?.value);
+  if(!name){toast('Enter a category name');input?.focus();return;}
+  if(scrapboardCategories().some(category=>category.toLowerCase()===name.toLowerCase())){toast('That category already exists');input?.focus();return;}
+  if(!await addScrapboardCategory(name)){toast('Category was not saved');return;}
+  render();toast(`${name} category added`);
+}
+async function submitScrapboardItem(){
+  const category=val('quick_add_item_category'),name=normalizedCatalogName(val('quick_add_item_name')),unit=val('quick_add_item_unit'),rate=Number(val('quick_add_item_rate'));
+  if(!name){toast('Enter an item name');document.getElementById('quick_add_item_name')?.focus();return;}
+  if(!Number.isFinite(rate)||rate<=0){toast('Enter a valid starting rate');document.getElementById('quick_add_item_rate')?.focus();return;}
+  if(scrapboardItems().some(item=>String(item.group).toLowerCase()===category.toLowerCase()&&String(item.label).toLowerCase()===name.toLowerCase())){toast('That item already exists in this category');return;}
+  if(!await addScrapboardItem(category,name,unit,rate)){toast('Item was not saved');return;}
+  render();toast(`${name} added to ${category}`);
 }
 function renderRateDownloadButton(){
   const icon=`<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 15v4h14v-4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
