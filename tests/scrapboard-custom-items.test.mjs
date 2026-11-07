@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 async function loadCustomItemApi() {
   const source = (await readFile(new URL('../public/app.js', import.meta.url), 'utf8')).replace(/initializeAuth\(\);\s*$/, '');
-  const context = vm.createContext({ console, Intl, Date, Math });
+  const context = vm.createContext({ console, Intl, Date, Math, document: { getElementById: () => null } });
   vm.runInContext(`${source}
     seedEmptyLedger(); ensureShape();
     let customSaveResult = true;
@@ -25,6 +25,12 @@ async function loadCustomItemApi() {
       customItems: () => Array.from(db.pricing.customScrapboardItems || [], item => ({ ...item })),
       catalog: () => Array.from(scrapboardItems(), item => ({ ...item })),
       renderRates: () => renderRates(),
+      renderBuying: () => renderBuying(),
+      lookup: key => ({ ...scrapboardItem(key) }),
+      label: key => gradeLabel('Scrapboard', key),
+      activeRate: key => ({ ...activeRate('Scrapboard', key) }),
+      exportRowsAvailable: () => typeof scrapboardRateExportRows === 'function',
+      exportRows: () => Array.from(scrapboardRateExportRows(), row => ({ ...row })),
       addCategory: value => addScrapboardCategory(value),
       addItem: (category, name, unit, rate) => addScrapboardItem(category, name, unit, rate)
     };`, context);
@@ -122,4 +128,29 @@ test('site palette uses grey white and light green low-contrast colors', async (
   assert.match(source, /--brass:#9ab8a5/);
   assert.match(source, /--brass-bright:#c9ddcf/);
   assert.match(source, /--ink:#34413d/);
+});
+
+test('custom item appears under its category on the Buying page', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  await api.addCategory('Laptop IC');
+  await api.addItem('Laptop IC', 'EC Controller', 'pc', 75);
+
+  const custom = api.customItems()[0];
+  const html = api.renderBuying();
+  assert.match(html, /<optgroup label="Laptop IC">/);
+  assert.match(html, new RegExp(`<option value="${custom.key}"[^>]*>EC Controller — PHP 75\\/pc<`));
+  assert.deepEqual(api.lookup(custom.key), custom);
+  assert.equal(api.label(custom.key), 'EC Controller');
+  assert.deepEqual(JSON.parse(JSON.stringify(api.activeRate(custom.key))), { rate: 75, effectiveDate: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()), unit: 'pc' });
+});
+
+test('daily-rate export rows include custom items', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  await api.addCategory('Special Boards');
+  await api.addItem('Special Boards', 'Router Board', 'kg', 240);
+
+  assert.equal(api.exportRowsAvailable(), true);
+  assert.equal(api.exportRows().some(row => row.category === 'Special Boards' && row.classification === 'Router Board' && row.unit === 'kg' && row.rate === 240), true);
 });

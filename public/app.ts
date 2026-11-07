@@ -102,7 +102,7 @@ function ensureShape(){
   db.pricing.scrapboardRates=db.pricing.scrapboardRates||{};
   db.pricing.customScrapboardCategories=Array.isArray(db.pricing.customScrapboardCategories)?db.pricing.customScrapboardCategories:[];
   db.pricing.customScrapboardItems=Array.isArray(db.pricing.customScrapboardItems)?db.pricing.customScrapboardItems:[];
-  SCRAPBOARD_ITEMS.forEach(item=>{
+  scrapboardItems().forEach(item=>{
     const saved=Number(db.pricing.scrapboardRates[item.key]);
     if(!Number.isFinite(saved)||saved<=0) db.pricing.scrapboardRates[item.key]=item.rate;
   });
@@ -492,16 +492,16 @@ function customPurityGradeKey(value){
   return `${Number(purity.toFixed(2))}%`;
 }
 function gradeLabel(metal, key){
-  if(metal==='Scrapboard') return SCRAPBOARD_BY_KEY[key]?.label||key;
+  if(metal==='Scrapboard') return scrapboardItems().find(item=>item.key===key)?.label||key;
   const g=gradeMeta(metal,key);
   if(g) return g.label;
   const customPurity=customPurityFromKey(key);
   return customPurity===null?key:`${Number(customPurity.toFixed(2))}% purity`;
 }
-function distinctKarats(metal){ return metal==='Scrapboard'?SCRAPBOARD_ITEMS.map(item=>item.key):(GRADES[metal] || []); }
+function distinctKarats(metal){ return metal==='Scrapboard'?scrapboardItems().map(item=>item.key):(GRADES[metal] || []); }
 function activeRate(metal, karat){
   if(metal==='Scrapboard'){
-    const item=SCRAPBOARD_BY_KEY[karat];
+    const item=scrapboardItems().find(entry=>entry.key===karat);
     if(!item) return null;
     const configured=Number(db.pricing?.scrapboardRates?.[karat]);
     return {rate:Number.isFinite(configured)&&configured>0?roundPeso(configured):item.rate,effectiveDate:db.pricing.effectiveDate,unit:item.unit};
@@ -4959,10 +4959,11 @@ function exportRetail(){ downloadCSV('scrapboard_direct_sales.csv', toCSV(db.ret
 function exportCustomers(){ downloadCSV('scrapboard_sellers.csv', toCSV(db.customers, [
   {label:'Name',key:'name'},{label:'Contact',key:'contact'},{label:'Notes',key:'notes'}
 ])); }
-function exportRates(){ downloadCSV('scrapboard_daily_rates.csv', toCSV(SCRAPBOARD_ITEMS.map(item=>({
-  effectiveDate:db.pricing.effectiveDate||todayStr(),classification:item.label,group:item.group,unit:item.unit,rate:Number(db.pricing.scrapboardRates?.[item.key]??item.rate)
-})), [
-  {label:'Effective date',key:'effectiveDate'},{label:'Group',key:'group'},{label:'Classification',key:'classification'},{label:'Unit',key:'unit'},{label:'Rate',key:'rate'}
+function scrapboardRateExportRows(){
+  return scrapboardItems().map(item=>({effectiveDate:db.pricing.effectiveDate||todayStr(),category:item.group,classification:item.label,unit:item.unit,rate:Number(db.pricing.scrapboardRates?.[item.key]??item.rate)}));
+}
+function exportRates(){ downloadCSV('scrapboard_daily_rates.csv', toCSV(scrapboardRateExportRows(), [
+  {label:'Effective date',key:'effectiveDate'},{label:'Category',key:'category'},{label:'Classification',key:'classification'},{label:'Unit',key:'unit'},{label:'Rate',key:'rate'}
 ])); }
 
 function closeCustomerHistoryModal(){ document.getElementById('customer_history_modal')?.remove(); }
@@ -5136,7 +5137,7 @@ function renderReports(){
 
 /* ============================= INIT ============================= */
 /* ============================= SCRAPBOARD BUYING EXPERIENCE ============================= */
-function scrapboardItem(key){ return SCRAPBOARD_BY_KEY[key]||SCRAPBOARD_ITEMS[0]; }
+function scrapboardItem(key){ return scrapboardItems().find(item=>item.key===key)||SCRAPBOARD_ITEMS[0]; }
 function purchaseQuantityLabel(item){
   const fallbackQuantity=item.unit==='kg'?Number(item.netWeight||0)/1000:Number(item.netWeight||0);
   const quantity=Number(item.purchaseQuantity??fallbackQuantity);
@@ -5148,7 +5149,7 @@ function renderBuying(){
   const savedCustomer=db.customers.find(customer=>String(customer.name).trim().toLowerCase()===sellerName.trim().toLowerCase());
   const customerStatus=!sellerName?'Optional — leave blank for a walk-in seller.':savedCustomer?`Using saved seller: ${savedCustomer.name}`:`“${sellerName}” will be saved as a new seller.`;
   const requested=buyingDraftValue('b_karat');
-  const key=SCRAPBOARD_BY_KEY[requested]?requested:SCRAPBOARD_ITEMS[0].key;
+  const key=scrapboardItems().some(item=>item.key===requested)?requested:SCRAPBOARD_ITEMS[0].key;
   const item=scrapboardItem(key),rateObj=activeRate('Scrapboard',key);
   const quantityValue=buyingDraftValue('b_gross'),quantity=parseFloat(quantityValue)||0;
   const systemRate=roundPeso(rateObj?.rate||0),enteredRate=buyingDraftValue('b_rate'),parsedRate=Number(enteredRate);
