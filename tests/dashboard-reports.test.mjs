@@ -1,0 +1,326 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import test from 'node:test';
+import vm from 'node:vm';
+
+async function loadDashboardReports() {
+  const appPath = new URL('../public/app.js', import.meta.url);
+  const source = (await readFile(appPath, 'utf8')).replace(/initializeAuth\(\);\s*$/, '');
+  const context = vm.createContext({ console });
+  vm.runInContext(`${source}\n;globalThis.dashboardReportsTestApi = {
+    renderReports,
+    renderDashboard,
+    renderInventory,
+    todayStr,
+    shiftDateKey,
+    todayPurchaseMetalSummary,
+    dailyMetalPurityBreakdownMarkup,
+    purchaseTotalsByPurity,
+    purchaseSellerGroups,
+    openSellerMetal(key, metal) {
+      let html='';
+      globalThis.document={getElementById:()=>null,createElement:()=>({innerHTML:'',addEventListener(){},querySelector:()=>({focus(){}})}),body:{appendChild:element=>{html=element.innerHTML;}}};
+      openPurchaseSellerMetal({dataset:{purchaseSellerKey:key,purchaseMetal:metal},focus(){}});
+      return html;
+    },
+    setInventoryView(date, metal = 'All') {
+      inventoryWeekOffset = 0;
+      inventorySelectedDate = date;
+      invFilter = { metal, karat: 'All', type: 'All', status: 'All' };
+    },
+    setState(state) {
+      db = state.db;
+      currentUser = state.currentUser;
+      dashboardReportPanel = state.dashboardReportPanel;
+    }
+  };`, context);
+  return context.dashboardReportsTestApi;
+}
+
+function testState(stock, dashboardReportPanel = '') {
+  return {
+    currentUser: { role: 'admin' },
+    dashboardReportPanel,
+    db: {
+      stock,
+      customers: [],
+      liquidations: [],
+      refiningBatches: [],
+      retailSales: [],
+      pricingHistory: []
+    }
+  };
+}
+
+test('closed dashboard reports do not format hidden purchase rows', async () => {
+  const api = await loadDashboardReports();
+  let formattedRows = 0;
+  const purchase = {
+    id: 'stock-1',
+    date: '2026-09-10',
+    sourceRefiningBatchId: null,
+    currentWeight: 0,
+    payout: 100,
+    netWeight: 1,
+    metal: 'Gold',
+    karat: '18K',
+    itemType: 'Jewelry',
+    status: 'Sold',
+    staff: 'Staff',
+    batchId: 'batch-1',
+    get customerName() {
+      formattedRows += 1;
+      return 'Example seller';
+    }
+  };
+
+  api.setState(testState([purchase]));
+  api.renderReports();
+
+  assert.equal(formattedRows, 0);
+});
+
+test('opening purchase history formats its rows', async () => {
+  const api = await loadDashboardReports();
+  let formattedRows = 0;
+  const purchase = {
+    id: 'stock-1',
+    date: '2026-09-10',
+    sourceRefiningBatchId: null,
+    currentWeight: 0,
+    payout: 100,
+    netWeight: 1,
+    metal: 'Gold',
+    karat: '18K',
+    itemType: 'Jewelry',
+    status: 'Sold',
+    staff: 'Staff',
+    batchId: 'batch-1',
+    get customerName() {
+      formattedRows += 1;
+      return 'Example seller';
+    }
+  };
+
+  api.setState(testState([purchase], 'purchases'));
+  const html = api.renderReports();
+
+  assert.ok(formattedRows > 0);
+  assert.match(html, /Example seller/);
+});
+
+test('dashboard record labels use scrapboard buying and sales terms', async () => {
+  const api = await loadDashboardReports();
+  api.setState(testState([]));
+
+  const html = api.renderReports();
+  assert.match(html, /<span>Buying records<\/span>/);
+  assert.match(html, /<span>Sales &amp; releases<\/span>/);
+  assert.doesNotMatch(html, /<span>Purchase history<\/span>/);
+  assert.doesNotMatch(html, /<span>Liquidation history<\/span>/);
+});
+
+test('dashboard groups only today scrapboard purchases into a clickable total', async () => {
+  const api = await loadDashboardReports();
+  const today = api.todayStr();
+  const stock = [
+    { id: 'board-1', date: today, metal: 'Scrapboard', netWeight: 2500, payout: 12000 },
+    { id: 'board-2', date: today, metal: 'Scrapboard', netWeight: 1250, payout: 6000 },
+    { id: 'old-gold', date: '2000-01-01', metal: 'Gold', netWeight: 100, payout: 999999 }
+  ];
+  api.setState(testState(stock));
+
+  const html = api.renderDashboard();
+  const gold = api.todayPurchaseMetalSummary(stock.filter(item => item.date === today), 'Scrapboard');
+
+  assert.equal(gold.count, 2);
+  assert.equal(gold.weight, 3750);
+  assert.equal(gold.payout, 18000);
+  assert.match(html, /openTodayMetalPurchases\('Scrapboard'\)/);
+  assert.match(html, /PHP 18,000/);
+  assert.doesNotMatch(html, /PHP 999,999/);
+});
+
+test('dashboard material details include totals grouped by classification', async () => {
+  const api = await loadDashboardReports();
+  const html = api.dailyMetalPurityBreakdownMarkup([
+    { metal: 'Gold', karat: '18K', netWeight: 2.5, currentWeight: 2, payout: 10000 },
+    { metal: 'Gold', karat: '18K', netWeight: 1.5, currentWeight: 0, payout: 6000 },
+    { metal: 'Gold', karat: '14K', netWeight: 3, currentWeight: 3, payout: 9000 }
+  ], 'Gold');
+
+  assert.match(html, /Gold totals by classification/);
+  assert.match(html, /18K/);
+  assert.match(html, /14K/);
+  assert.match(html, /4\.00 g/);
+  assert.match(html, /PHP 16,000/);
+});
+
+test('liquidation readiness defaults to two weeks and sorts newest purchases first', async () => {
+  const api = await loadDashboardReports();
+  const today = api.todayStr();
+  const yesterday = api.shiftDateKey(today, -1);
+  const older = api.shiftDateKey(today, -20);
+  const readyItem = (id, date, metal) => ({ id, date, metal, karat: '999', itemType: 'Scrap', status: 'Available', currentWeight: 1 });
+  api.setState(testState([
+    readyItem('older', older, 'Platinum'),
+    readyItem('yesterday', yesterday, 'Silver'),
+    readyItem('today', today, 'Gold')
+  ], 'readiness'));
+
+  const html = api.renderReports();
+
+  assert.match(html, /Last 2 weeks/);
+  assert.ok(html.indexOf('Gold') < html.indexOf('Silver'));
+  assert.doesNotMatch(html, /Platinum/);
+  assert.match(html, /2 of 3 eligible items/);
+});
+
+test('daily inventory totals group every purchase by classification including released items', async () => {
+  const api = await loadDashboardReports();
+  const today = api.todayStr();
+  const stock = [
+    { id: 'gold-active', date: today, metal: 'Gold', karat: '18K', itemType: 'Scrap', status: 'Available', netWeight: 2.5, currentWeight: 2.5, payout: 10000, cost: 10000 },
+    { id: 'gold-liquidated', date: today, metal: 'Gold', karat: '18K', itemType: 'Jewelry', status: 'Liquidated', netWeight: 1.5, currentWeight: 0, payout: 6000, cost: 6000 },
+    { id: 'silver-active', date: today, metal: 'Silver', karat: '925', itemType: 'Scrap', status: 'For Refining', netWeight: 10, currentWeight: 10, payout: 1000, cost: 1000 }
+  ];
+  api.setState(testState(stock));
+  api.setInventoryView(today, 'Gold');
+
+  const totals = api.purchaseTotalsByPurity(stock.filter(item => item.metal === 'Gold'));
+  const html = api.renderInventory();
+
+  assert.equal(totals.length, 1);
+  assert.equal(totals[0].count, 2);
+  assert.equal(totals[0].purchasedWeight, 4);
+  assert.equal(totals[0].remainingWeight, 2.5);
+  assert.equal(totals[0].payout, 16000);
+  assert.match(html, /Buying totals by classification/);
+  assert.doesNotMatch(html, /End-of-day/);
+  assert.match(html, /Today's scrapboard totals/);
+  assert.match(html, /Today's classifications/);
+  assert.match(html, /PHP 16,000/);
+  assert.match(html, /4\.00 g/);
+});
+
+test('current stock breakdown renders distinct metal section headers', async () => {
+  const api = await loadDashboardReports();
+  api.setState(testState([
+    { id: 'gold', date: '2026-09-10', metal: 'Gold', karat: '18K', itemType: 'Scrap', status: 'Available', currentWeight: 5, cost: 1000 },
+    { id: 'silver', date: '2026-09-10', metal: 'Silver', karat: '925', itemType: 'Scrap', status: 'Available', currentWeight: 10, cost: 500 },
+    { id: 'platinum', date: '2026-09-10', metal: 'Platinum', karat: '900', itemType: 'Scrap', status: 'Available', currentWeight: 2, cost: 800 }
+  ]));
+  api.setInventoryView('All');
+
+  const html = api.renderInventory();
+
+  assert.match(html, /class="inventory-breakdown-metal-header inventory-breakdown-metal-header--gold"/);
+  assert.match(html, /class="inventory-breakdown-metal-header inventory-breakdown-metal-header--silver"/);
+  assert.match(html, /class="inventory-breakdown-metal-header inventory-breakdown-metal-header--platinum"/);
+});
+
+test('inventory summary cards align with the full inventory content width', async () => {
+  const indexPath = new URL('../public/index.html', import.meta.url);
+  const source = await readFile(indexPath, 'utf8');
+
+  assert.match(source, /\.low-karat-card\{[^}]*width:100%/);
+  assert.match(source, /\.table-wrap\.inventory-breakdown\{width:100%;max-width:none/);
+  assert.match(source, /\.inventory-breakdown-total\{width:100%/);
+  assert.doesNotMatch(source, /\.low-karat-card\{[^}]*1080px/);
+  assert.doesNotMatch(source, /\.inventory-breakdown-total\{width:min\(100%,1080px\)/);
+});
+
+test('inventory summary uses compact refining controls and aligned numeric columns', async () => {
+  const indexPath = new URL('../public/index.html', import.meta.url);
+  const source = await readFile(indexPath, 'utf8');
+
+  assert.match(source, /\.low-karat-card\{[^}]*padding:10px 14px/);
+  assert.match(source, /\.low-karat-card \.btn\{padding:8px 14px/);
+  assert.match(source, /\.inventory-breakdown th\.num-head\{text-align:right/);
+});
+
+test('inventory breakdown groups its heading, table, and total into one card', async () => {
+  const api = await loadDashboardReports();
+  api.setState(testState([
+    { id: 'gold', date: '2026-09-10', metal: 'Gold', karat: '18K', itemType: 'Scrap', status: 'Available', currentWeight: 5, cost: 1000 }
+  ]));
+  api.setInventoryView('All');
+
+  const html = api.renderInventory();
+
+  assert.match(html, /<div class="inventory-breakdown-card">/);
+  assert.match(html, /inventory-breakdown-intro/);
+  assert.match(html, /inventory-breakdown-card[\s\S]*inventory-breakdown[\s\S]*inventory-breakdown-total/);
+});
+
+test('stock records content uses the full inventory width', async () => {
+  const indexPath = new URL('../public/index.html', import.meta.url);
+  const source = await readFile(indexPath, 'utf8');
+
+  assert.match(source, /\.inventory-stock-head\{width:100%;max-width:none/);
+  assert.match(source, /\.inventory-action-panel\{width:100%;max-width:none/);
+  assert.match(source, /#inventory_stock_list \.table-wrap\{width:100%;max-width:none/);
+});
+
+test('stock records table keeps its column headers visible while scrolling', async () => {
+  const indexPath = new URL('../public/index.html', import.meta.url);
+  const source = await readFile(indexPath, 'utf8');
+
+  assert.match(source, /#inventory_stock_list \.table-wrap thead th\{[^}]*position:sticky/);
+  assert.match(source, /#inventory_stock_list \.table-wrap thead th\{[^}]*top:0/);
+  assert.match(source, /#inventory_stock_list \.table-wrap\{[^}]*overflow:visible/);
+});
+
+test('stock records sticky headers are not blocked by the main overflow container', async () => {
+  const indexPath = new URL('../public/index.html', import.meta.url);
+  const source = await readFile(indexPath, 'utf8');
+
+  assert.match(source, /main\{\s*flex:1;\s*min-width:0;\s*overflow-x:clip;/);
+  assert.doesNotMatch(source, /main\{\s*flex:1;\s*min-width:0;\s*overflow-x:hidden;/);
+});
+
+test('stock records table can be dragged horizontally on phone widths', async () => {
+  const indexPath = new URL('../public/index.html', import.meta.url);
+  const source = await readFile(indexPath, 'utf8');
+
+  assert.match(source, /#inventory_stock_list \.table-wrap\{overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y\}/);
+  assert.match(source, /#inventory_stock_list table\{min-width:960px\}/);
+});
+
+
+test('Buying dashboard groups matching sellers by date and exposes their classifications without merging receipts',async()=>{
+  const api=await loadDashboardReports();
+  const base={date:'2026-11-07',itemType:'Scrap',status:'Available',currentWeight:1,netWeight:1,payout:100,staff:'Staff'};
+  const stock=[
+    {...base,id:'a',batchId:'buy-a',customerName:'Dalia Felix',metal:'Gold',karat:'8K'},
+    {...base,id:'b',batchId:'buy-b',customerName:' dalia  felix ',metal:'Gold',karat:'24K',netWeight:2,payout:200},
+    {...base,id:'c',batchId:'buy-c',customerName:'Dalia Felix',metal:'Silver',karat:'925',netWeight:3,payout:300},
+    {...base,id:'d',batchId:'buy-d',customerName:'Mad',metal:'Gold',karat:'10K'},
+    {...base,id:'e',batchId:'buy-e',customerName:'Dalia Felix',metal:'Gold',karat:'22K',date:'2026-11-06'}
+  ];
+  const before=JSON.stringify(stock);api.setState(testState(stock,'purchases'));
+  const groups=api.purchaseSellerGroups(stock);
+  assert.equal(groups.length,3);assert.equal(groups[0].items.length,3);
+  assert.equal(groups[0].weight,6);assert.equal(groups[0].payout,600);
+  const html=api.renderReports();
+  assert.equal((html.match(/data-dashboard-search=/g)||[]).length,3);
+  assert.match(html,/Scrapboard items bought<\/div><div class="value">5<\/div>/);
+  assert.match(html,/data-purchase-metal="Gold"/);assert.match(html,/data-purchase-metal="Silver"/);
+  assert.doesNotMatch(html,/24K, 8K/,'karat lists stay inside the metal detail view');
+  assert.match(html,/<strong>Gold<\/strong><span class="purchase-metal-count">2<\/span>/);
+  assert.match(html,/<strong>Silver<\/strong><span class="purchase-metal-count">1<\/span>/);
+  assert.match(html,/3 items · 3 receipts/);
+  const gold=api.openSellerMetal(groups[0].key,'Gold');
+  assert.match(gold,/8K/);assert.match(gold,/24K/);assert.doesNotMatch(gold,/925|22K|10K/);
+  assert.match(gold,/data-purchase-receipt="buy-a"/);assert.match(gold,/data-purchase-receipt="buy-b"/);
+  assert.doesNotMatch(gold,/data-purchase-receipt="buy-c"/);
+  const silver=api.openSellerMetal(groups[0].key,'Silver');assert.match(silver,/925/);assert.doesNotMatch(silver,/24K|8K/);
+  assert.equal(JSON.stringify(stock),before,'grouping and detail views must not mutate purchases');
+});
+
+test('unnamed sellers remain separate across transactions but group items from the same receipt',async()=>{
+  const api=await loadDashboardReports();
+  const base={date:'2026-11-07',customerName:'',metal:'Gold',karat:'18K',netWeight:1,payout:100};
+  const groups=api.purchaseSellerGroups([{...base,id:'a',batchId:'buy-a'},{...base,id:'b',batchId:'buy-a'},{...base,id:'c',batchId:'buy-c'},{...base,id:'d'}]);
+  assert.equal(groups.length,3);assert.equal(groups[0].items.length,2);assert.equal(groups[0].seller,'Walk-in');
+});
