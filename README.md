@@ -1,10 +1,6 @@
-# Scrapboard Trading
+# ZPScraptrading
 
 TypeScript web application for scrapboard buying, daily rate management, inventory, payouts, customer records, reporting, and role-based user access.
-
-## Documentation
-
-- [User guide](docs/USER_GUIDE.md) — complete operating instructions for Admin and Staff users.
 
 ## Run locally
 
