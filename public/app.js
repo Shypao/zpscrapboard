@@ -118,6 +118,8 @@ function ensureShape() {
     db.pricing.dailyFormula.baseRates = db.pricing.dailyFormula.baseRates || {};
     db.pricing.publicDailyRates = db.pricing.publicDailyRates || null;
     db.pricing.scrapboardRates = db.pricing.scrapboardRates || {};
+    db.pricing.customScrapboardCategories = Array.isArray(db.pricing.customScrapboardCategories) ? db.pricing.customScrapboardCategories : [];
+    db.pricing.customScrapboardItems = Array.isArray(db.pricing.customScrapboardItems) ? db.pricing.customScrapboardItems : [];
     SCRAPBOARD_ITEMS.forEach(item => {
         const saved = Number(db.pricing.scrapboardRates[item.key]);
         if (!Number.isFinite(saved) || saved <= 0)
@@ -484,6 +486,57 @@ const SCRAPBOARD_ITEMS = [
     { key: 'NOKIA_ORIG_BUO', label: 'Nokia original buo', rate: 80, unit: 'pc', group: 'Whole units' }
 ];
 const SCRAPBOARD_BY_KEY = Object.fromEntries(SCRAPBOARD_ITEMS.map(item => [item.key, item]));
+function scrapboardItems() {
+    const custom = Array.isArray(db.pricing?.customScrapboardItems) ? db.pricing.customScrapboardItems : [];
+    return [...SCRAPBOARD_ITEMS, ...custom];
+}
+function scrapboardCategories() {
+    const builtIn = SCRAPBOARD_ITEMS.map(item => item.group);
+    const custom = Array.isArray(db.pricing?.customScrapboardCategories) ? db.pricing.customScrapboardCategories : [];
+    return [...new Set([...builtIn, ...custom].map(name => String(name || '').trim()).filter(Boolean))];
+}
+function normalizedCatalogName(value) { return String(value || '').trim().replace(/\s+/g, ' '); }
+function customScrapboardKey(name) {
+    const slug = normalizedCatalogName(name).toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 32) || 'ITEM';
+    const used = new Set(scrapboardItems().map(item => item.key));
+    let key = '';
+    do {
+        key = `CUSTOM_${slug}_${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    } while (used.has(key));
+    return key;
+}
+async function addScrapboardCategory(name) {
+    if (!isAdmin())
+        return false;
+    const category = normalizedCatalogName(name);
+    if (!category || scrapboardCategories().some(value => value.toLowerCase() === category.toLowerCase()))
+        return false;
+    const before = [...(db.pricing.customScrapboardCategories || [])];
+    db.pricing.customScrapboardCategories = [...before, category];
+    if (await savePricingDB())
+        return true;
+    db.pricing.customScrapboardCategories = before;
+    return false;
+}
+async function addScrapboardItem(category, name, unit, rate) {
+    if (!isAdmin())
+        return false;
+    const group = normalizedCatalogName(category), label = normalizedCatalogName(name), normalizedUnit = String(unit || '').toLowerCase(), numericRate = Number(rate);
+    const resolvedCategory = scrapboardCategories().find(value => value.toLowerCase() === group.toLowerCase());
+    if (!resolvedCategory || !label || !['kg', 'pc'].includes(normalizedUnit) || !Number.isFinite(numericRate) || numericRate <= 0)
+        return false;
+    if (scrapboardItems().some(item => String(item.group).toLowerCase() === resolvedCategory.toLowerCase() && String(item.label).toLowerCase() === label.toLowerCase()))
+        return false;
+    const beforeItems = [...(db.pricing.customScrapboardItems || [])], beforeRates = { ...(db.pricing.scrapboardRates || {}) };
+    const item = { key: customScrapboardKey(label), label, rate: numericRate, unit: normalizedUnit, group: resolvedCategory };
+    db.pricing.customScrapboardItems = [...beforeItems, item];
+    db.pricing.scrapboardRates[item.key] = numericRate;
+    if (await savePricingDB())
+        return true;
+    db.pricing.customScrapboardItems = beforeItems;
+    db.pricing.scrapboardRates = beforeRates;
+    return false;
+}
 const GRADE_META = { Gold: GOLD_GRADES, Silver: SILVER_GRADES, Platinum: PLATINUM_GRADES };
 const GRADES = Object.fromEntries(Object.entries(GRADE_META).map(([metal, grades]) => [metal, grades.map(g => g.key)]));
 function gradeMeta(metal, key) {
