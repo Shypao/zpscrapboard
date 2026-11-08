@@ -36,6 +36,7 @@ async function loadCustomItemApi() {
       renderBuying: () => renderBuying(),
       categoryEditor: key => scrapboardCategoryEditorMarkup(key),
       itemEditor: key => scrapboardItemEditorMarkup(key),
+      setCatalogExpanded: value => rememberScrapboardCatalogExpanded(value),
       lookup: key => ({ ...scrapboardItem(key) }),
       label: key => gradeLabel('Scrapboard', key),
       activeRate: key => ({ ...activeRate('Scrapboard', key) }),
@@ -221,6 +222,22 @@ test('Daily Rates renders compact category and item management only for administ
   api.setStaff();
   const staffHtml = api.renderRates();
   assert.doesNotMatch(staffHtml, /Catalog management|Manage category|Edit item/);
+});
+
+test('Catalog management is expandable and stays minimized until the administrator opens it', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+
+  const collapsed = api.renderRates();
+  assert.match(collapsed, /<details class="scrap-catalog-details"[^>]*>/);
+  assert.doesNotMatch(collapsed, /<details class="scrap-catalog-details" open/);
+  assert.match(collapsed, /Expand catalog/);
+  assert.match(collapsed, /Minimize catalog/);
+
+  api.setCatalogExpanded(true);
+  assert.match(api.renderRates(), /<details class="scrap-catalog-details" open/);
+  api.setCatalogExpanded(false);
+  assert.doesNotMatch(api.renderRates(), /<details class="scrap-catalog-details" open/);
 });
 
 test('category editor exposes rename deactivate and conditional permanent delete actions', async () => {
