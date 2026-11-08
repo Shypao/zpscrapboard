@@ -425,6 +425,15 @@ test('site palette matches the original cream charcoal and brass software style'
   assert.match(finalRoot, /--ink:#1C1B19/);
 });
 
+test('number inputs hide browser increment and decrement spinners', async () => {
+  const source = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+
+  assert.match(source, /input\[type="number"\]::-webkit-inner-spin-button/);
+  assert.match(source, /input\[type="number"\]::-webkit-outer-spin-button/);
+  assert.match(source, /-webkit-appearance:none/);
+  assert.match(source, /input\[type="number"\]\{[^}]*-moz-appearance:textfield/);
+});
+
 test('custom item appears under its category on the Buying page', async () => {
   const api = await loadCustomItemApi();
   api.setAdmin();
