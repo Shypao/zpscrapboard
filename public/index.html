@@ -296,6 +296,9 @@
     outline:2px solid var(--brass-bright);
     outline-offset:1px;
   }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
+  input[type="number"]{-moz-appearance:textfield;appearance:textfield;}
   input[readonly]{color:var(--ink-soft);background:var(--paper-3);}
   textarea{resize:vertical;min-height:40px;}
   .field .hint{font-size:10.5px;color:var(--ink-soft);}
