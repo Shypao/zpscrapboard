@@ -34,6 +34,8 @@ async function loadCustomItemApi() {
       actionToken: value => catalogActionToken(value),
       renderRates: () => renderRates(),
       renderBuying: () => renderBuying(),
+      renderInventory: () => renderInventory(),
+      renderReports: () => renderReports(),
       categoryEditor: key => scrapboardCategoryEditorMarkup(key),
       itemEditor: key => scrapboardItemEditorMarkup(key),
       setCatalogExpanded: value => rememberScrapboardCatalogExpanded(value),
@@ -432,6 +434,16 @@ test('number inputs hide browser increment and decrement spinners', async () => 
   assert.match(source, /input\[type="number"\]::-webkit-outer-spin-button/);
   assert.match(source, /-webkit-appearance:none/);
   assert.match(source, /input\[type="number"\]\{[^}]*-moz-appearance:textfield/);
+});
+
+test('scrapboard buying inventory and reports do not expose refining controls', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+
+  const visibleUi = `${api.renderBuying()} ${api.renderInventory()} ${api.renderReports()}`;
+  assert.doesNotMatch(visibleUi, /For Refining|For Processing|Send to processing/i);
+  assert.doesNotMatch(visibleUi, /Processing history|exportRefining/i);
+  assert.doesNotMatch(visibleUi, /prepareInventoryForRefining/i);
 });
 
 test('custom item appears under its category on the Buying page', async () => {
