@@ -261,6 +261,15 @@ test('downloadable scrapboard overview uses the active catalog groups and rates'
   assert.doesNotMatch(generator, /GOLD_GRADES|SILVER_GRADES|PLATINUM_GRADES/);
 });
 
+test('downloadable scrapboard overview uses an HD canvas and larger five-column cards', async () => {
+  const source = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
+  const generator = source.match(/async function downloadScrapboardRateSheetImage\([\s\S]*?\n\}/)?.[0] || '';
+
+  assert.match(generator, /const width = 2400/);
+  assert.match(generator, /columns = 5/);
+  assert.match(generator, /cardHeight = 128/);
+});
+
 test('category editor exposes rename deactivate and conditional permanent delete actions', async () => {
   const api = await loadCustomItemApi();
   api.setAdmin();
