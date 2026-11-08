@@ -240,6 +240,27 @@ test('Catalog management is expandable and stays minimized until the administrat
   assert.doesNotMatch(api.renderRates(), /<details class="scrap-catalog-details" open/);
 });
 
+test('Daily Rates offers PNG and JPG downloads for the scrapboard overview', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+
+  const html = api.renderRates();
+  assert.match(html, /downloadScrapboardRateSheetImage\('png'\)/);
+  assert.match(html, /Download PNG/);
+  assert.match(html, /downloadScrapboardRateSheetImage\('jpg'\)/);
+  assert.match(html, /Download JPG/);
+});
+
+test('downloadable scrapboard overview uses the active catalog groups and rates', async () => {
+  const source = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
+  const generator = source.match(/async function downloadScrapboardRateSheetImage\([\s\S]*?\n\}/)?.[0] || '';
+
+  assert.match(generator, /scrapboardRateGroups\(\)/);
+  assert.match(generator, /db\.pricing\.scrapboardRates/);
+  assert.match(generator, /SCRAPBOARD TRADING/);
+  assert.doesNotMatch(generator, /GOLD_GRADES|SILVER_GRADES|PLATINUM_GRADES/);
+});
+
 test('category editor exposes rename deactivate and conditional permanent delete actions', async () => {
   const api = await loadCustomItemApi();
   api.setAdmin();

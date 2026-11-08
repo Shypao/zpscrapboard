@@ -1208,7 +1208,7 @@ function renderRates(){
   const groups=scrapboardRateGroups();
   return `<section class="scrap-rate-hero">
     <div><div class="eyebrow">SCRAPBOARD BUYING GUIDE</div><h2>Daily buying rates</h2><p>These are the active prices used automatically on the Buying page. Rates marked / kg use kilograms; rates marked / pc use individual pieces.</p></div>
-    <div class="scrap-rate-date"><small>Effective date</small><br><strong>${fmtDate(db.pricing.effectiveDate||todayStr())}</strong></div>
+    <div class="scrap-rate-hero-tools"><div class="scrap-rate-date"><small>Effective date</small><br><strong>${fmtDate(db.pricing.effectiveDate||todayStr())}</strong></div>${renderScrapboardRateDownloadButtons()}</div>
   </section>
   ${isAdmin()?`<section class="scrap-quick-add"><div><div class="eyebrow">Quick add</div><h2>Add categories and buying items</h2><p>New items are saved to the shared rate list and appear automatically on the Buying page.</p></div><div class="scrap-quick-add-grid">
     <div class="scrap-quick-add-form"><h3>New category</h3><div class="field"><label for="quick_add_category_name">Category name</label><input id="quick_add_category_name" maxlength="80" placeholder="e.g. Charger boards"></div><button class="btn secondary small" type="button" onclick="submitScrapboardCategory()">Add category</button></div>
@@ -1218,6 +1218,72 @@ function renderRates(){
     ${items.map(item=>`<div class="scrap-rate-card"><div><label for="scrap_rate_${item.key}">${esc(item.label)}</label><small>Philippine peso / ${item.unit}</small></div><div class="scrap-rate-input"><span>₱</span><input id="scrap_rate_${item.key}" type="number" min="1" step="1" value="${roundPeso(db.pricing.scrapboardRates?.[item.key]||item.rate)}" ${editable?'':'readonly aria-readonly="true"'}></div></div>`).join('')}
   </div></section>`).join('')}
   <div class="scrap-rate-actions"><span class="form-note">${editable?'Changes apply to new buying transactions.':'Rates are locked by the administrator.'}</span>${editable?'<button class="btn" onclick="saveScrapboardRates()">Save daily rates</button>':''}</div>`;
+}
+function renderScrapboardRateDownloadButtons(){
+  const icon=`<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 15v4h14v-4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  return `<div class="scrap-rate-downloads" aria-label="Download daily rate overview"><button id="scrapboard_rate_download_png" type="button" class="btn secondary scrap-rate-download" onclick="downloadScrapboardRateSheetImage('png')">${icon}<span>Download PNG</span></button><button id="scrapboard_rate_download_jpg" type="button" class="btn secondary scrap-rate-download" onclick="downloadScrapboardRateSheetImage('jpg')">${icon}<span>Download JPG</span></button></div>`;
+}
+async function downloadScrapboardRateSheetImage(imageType:'png'|'jpg'='png'){
+  const groups=Object.entries(scrapboardRateGroups());
+  const rateSheetDate=db.pricing.effectiveDate||todayStr();
+  const mimeType=imageType==='png'?'image/png':'image/jpeg';
+  const imageLabel=imageType.toUpperCase();
+  const button=document.getElementById(`scrapboard_rate_download_${imageType}`) as HTMLButtonElement|null;
+  const originalLabel=button?.querySelector('span')?.textContent||`Download ${imageLabel}`;
+  if(button){button.disabled=true;button.setAttribute('aria-busy','true');const label=button.querySelector('span');if(label)label.textContent='Generating…';}
+  try{
+    await document.fonts?.ready;
+    const width=1600,pad=34,columns=7,gap=9,cardHeight=82,headingHeight=42,sectionGap=17,headerHeight=148,footerHeight=55;
+    const contentHeight=groups.reduce((total,[,items])=>total+headingHeight+Math.ceil(items.length/columns)*(cardHeight+gap)+sectionGap,0);
+    const height=headerHeight+30+contentHeight+footerHeight;
+    const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
+    const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas is unavailable');
+    const colors={paper:'#F5F3EC',card:'#FCFBF7',ink:'#1F2523',soft:'#63706C',line:'#CED8D4',accent:'#86B5AB',accentDeep:'#376C62',header:'#1E2422',cream:'#F7F5EC'};
+    ctx.textBaseline='alphabetic';ctx.fillStyle=colors.paper;ctx.fillRect(0,0,width,height);
+    const roundedRect=(x:number,y:number,w:number,h:number,r=7)=>{ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();};
+    const text=(value:unknown,x:number,y:number,font:string,color=colors.ink,align:CanvasTextAlign='left')=>{ctx.font=font;ctx.fillStyle=color;ctx.textAlign=align;ctx.fillText(String(value),x,y);};
+    const clippedText=(value:unknown,maxWidth:number,font:string)=>{ctx.font=font;let output=String(value||'');if(ctx.measureText(output).width<=maxWidth)return output;while(output&&ctx.measureText(`${output}…`).width>maxWidth)output=output.slice(0,-1);return `${output}…`;};
+    const money=(value:unknown)=>Math.round(Number(value)||0).toLocaleString('en-PH');
+    ctx.fillStyle=colors.header;ctx.fillRect(0,0,width,headerHeight);ctx.fillStyle=colors.accent;ctx.fillRect(0,headerHeight-4,width,4);
+    roundedRect(pad,24,76,76,14);ctx.fillStyle=colors.accent;ctx.fill();text('SB',pad+38,74,'800 27px Arial, sans-serif',colors.header,'center');
+    text('SCRAPBOARD TRADING',pad+100,62,'700 32px Georgia, serif',colors.cream);
+    text('DAILY BUYING RATE GUIDE',pad+100,90,'700 13px Arial, sans-serif',colors.accent);
+    text('All prices shown in Philippine pesos per kilogram or piece',pad+100,113,'12px Arial, sans-serif','#C6D0CC');
+    text(fmtDate(rateSheetDate).toUpperCase(),width-pad,58,'700 14px Arial, sans-serif',colors.cream,'right');
+    text('CURRENT SCRAPBOARD RATE SHEET',width-pad,83,'11px Arial, sans-serif','#C6D0CC','right');
+    text(`${scrapboardItems().length} ACTIVE BUYING ITEMS`,width-pad,106,'700 10px Arial, sans-serif',colors.accent,'right');
+    const cardWidth=(width-pad*2-gap*(columns-1))/columns;
+    let y=headerHeight+30;
+    for(const [group,items] of groups){
+      ctx.beginPath();ctx.fillStyle=colors.accent;ctx.arc(pad+6,y+8,6,0,Math.PI*2);ctx.fill();
+      text(group,pad+22,y+14,'700 18px Georgia, serif');
+      const groupWidth=ctx.measureText(group).width;
+      text(`${items.length} ITEM${items.length===1?'':'S'}`,pad+34+groupWidth,y+12,'700 9px Arial, sans-serif',colors.soft);
+      ctx.beginPath();ctx.strokeStyle=colors.line;ctx.lineWidth=1;ctx.moveTo(pad+120+groupWidth,y+7);ctx.lineTo(width-pad,y+7);ctx.stroke();
+      const cardsY=y+headingHeight;
+      items.forEach((item,index)=>{
+        const column=index%columns,row=Math.floor(index/columns),x=pad+column*(cardWidth+gap),cardY=cardsY+row*(cardHeight+gap);
+        roundedRect(x,cardY,cardWidth,cardHeight,6);ctx.fillStyle=colors.card;ctx.fill();ctx.strokeStyle=colors.line;ctx.lineWidth=1;ctx.stroke();
+        ctx.fillStyle=colors.accent;ctx.fillRect(x,cardY,4,cardHeight);
+        const labelFont='700 12px Arial, sans-serif';text(clippedText(item.label,cardWidth-28,labelFont),x+14,cardY+23,labelFont,colors.soft);
+        text('₱',x+14,cardY+57,'700 16px Arial, sans-serif',colors.accentDeep);
+        const rate=roundPeso(db.pricing.scrapboardRates?.[item.key]||item.rate);
+        text(money(rate),x+35,cardY+59,'700 23px Arial, sans-serif');
+        text(`PER ${item.unit.toUpperCase()}`,x+cardWidth-13,cardY+58,'700 8px Arial, sans-serif',colors.soft,'right');
+        text('BUYING RATE',x+14,cardY+74,'700 8px Arial, sans-serif',colors.accentDeep);
+      });
+      y=cardsY+Math.ceil(items.length/columns)*(cardHeight+gap)+sectionGap;
+    }
+    ctx.beginPath();ctx.strokeStyle=colors.line;ctx.moveTo(pad,height-38);ctx.lineTo(width-pad,height-38);ctx.stroke();
+    text('SCRAPBOARD TRADING  ·  DAILY BUYING RATE GUIDE',pad,height-18,'700 9px Arial, sans-serif',colors.soft);
+    text(`Generated ${new Date().toLocaleString('en-PH',{dateStyle:'medium',timeStyle:'short'})}`,width-pad,height-18,'10px Arial, sans-serif',colors.soft,'right');
+    const blob=await new Promise<Blob|null>(resolve=>canvas.toBlob(resolve,mimeType,imageType==='jpg'?.94:undefined));
+    if(!blob)throw new Error(`${imageLabel} generation failed`);
+    const filename=`scrapboard-daily-rates-${rateSheetDate}.${imageType}`,url=URL.createObjectURL(blob),link=document.createElement('a');
+    link.href=url;link.download=filename;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    toast(`Scrapboard daily rates ${imageLabel} downloaded`);
+  }catch(error){console.error(`Scrapboard rate sheet ${imageLabel} download failed`,error);toast(`Could not generate the ${imageLabel} rate sheet`);}
+  finally{if(button){button.disabled=false;button.removeAttribute('aria-busy');const label=button.querySelector('span');if(label)label.textContent=originalLabel;}}
 }
 async function saveScrapboardRates(){
   if(!canEditDailyRates()){toast('Daily rates are locked by the administrator');return;}
