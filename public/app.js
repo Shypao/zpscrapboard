@@ -529,6 +529,16 @@ function scrapboardItems(includeInactive = false) {
         return resolved;
     });
 }
+function scrapboardItemCategoryKey(key) {
+    const raw = rawScrapboardItems().find(item => item.key === key);
+    if (!raw)
+        return '';
+    const setting = catalogOwnSetting(db.pricing?.scrapboardItemSettings || {}, key);
+    return scrapboardCategoryEntry(setting.group || raw.group, true)?.key || raw.group;
+}
+function scrapboardCategoryItems(key) {
+    return scrapboardItems(true).filter(item => scrapboardItemCategoryKey(item.key) === key);
+}
 function customScrapboardKey(name) {
     const slug = normalizedCatalogName(name).toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 32) || 'ITEM';
     const used = new Set(scrapboardItems(true).map(item => item.key));
@@ -1403,6 +1413,128 @@ function scrapboardRateGroups() {
         return groups;
     }, initial);
 }
+function catalogActionToken(value) { return encodeURIComponent(String(value)); }
+function scrapboardCategoryCanDelete(key) {
+    const category = scrapboardCategoryEntry(key, true);
+    return Boolean(category?.custom && !scrapboardCategoryItems(category.key).length);
+}
+function scrapboardItemCanDelete(key) {
+    return Boolean((db.pricing?.customScrapboardItems || []).some(item => item.key === key) && !scrapboardCatalogReferenced(key));
+}
+function scrapboardCatalogManagementMarkup() {
+    const categories = scrapboardCategoryEntries(true);
+    return `<section class="scrap-catalog-manager"><div class="scrap-catalog-head"><div><div class="eyebrow">Catalog management</div><h2>Edit categories and items</h2><p>Rename, move, deactivate, or safely remove entries. Inactive entries stay in history but disappear from Buying and active rates.</p></div><span class="scrap-catalog-count">${scrapboardItems(true).length} items</span></div><div class="scrap-catalog-groups">${categories.map(category => {
+        const items = scrapboardCategoryItems(category.key), categoryToken = catalogActionToken(category.key);
+        return `<article class="scrap-catalog-group${category.active ? '' : ' is-inactive'}"><div class="scrap-catalog-group-head"><div><strong>${esc(category.label)}</strong>${category.active ? '' : '<span class="scrap-catalog-status">Inactive</span>'}<small>${items.length} item${items.length === 1 ? '' : 's'}</small></div><button class="btn secondary small" type="button" onclick="openScrapboardCategoryEditor('${categoryToken}')">Manage category</button></div><div class="scrap-catalog-items">${items.length ? items.map(item => `<div class="scrap-catalog-item"><div><strong>${esc(item.label)}</strong>${item.active ? '' : '<span class="scrap-catalog-status">Inactive</span>'}<small>${esc(item.unit)} · ${esc(item.key)}</small></div><button class="btn secondary small" type="button" onclick="openScrapboardItemEditor('${catalogActionToken(item.key)}')">Edit item</button></div>`).join('') : '<p class="scrap-catalog-empty">No items yet.</p>'}</div></article>`;
+    }).join('')}</div></section>`;
+}
+function scrapboardCategoryEditorMarkup(key) {
+    const category = scrapboardCategoryEntry(key, true);
+    if (!category)
+        return '';
+    const token = catalogActionToken(category.key), toggleLabel = category.active ? 'Deactivate' : 'Activate';
+    return `<div class="edit-modal scrap-catalog-modal" role="dialog" aria-modal="true" aria-labelledby="scrap_catalog_editor_title"><div class="summary-modal-head"><div><div class="eyebrow">Catalog management</div><h2 id="scrap_catalog_editor_title">Edit category</h2></div><button type="button" class="modal-close" onclick="closeScrapboardCatalogEditor()" aria-label="Close">×</button></div><div class="form-grid"><div class="field span-2"><label for="scrap_category_label">Category name</label><input id="scrap_category_label" maxlength="80" value="${esc(category.label)}"></div></div><p class="form-note">Deactivating this category hides all its items from new buying transactions without changing past records.</p><div class="form-actions scrap-catalog-modal-actions">${scrapboardCategoryCanDelete(category.key) ? `<button type="button" class="btn danger" onclick="confirmDeleteScrapboardCategory('${token}')">Delete permanently</button>` : ''}<button type="button" class="btn secondary" onclick="toggleScrapboardCategory('${token}')">${toggleLabel}</button><button type="button" class="btn" onclick="saveScrapboardCategoryEditor('${token}')">Save category</button></div></div>`;
+}
+function scrapboardItemEditorMarkup(key) {
+    const item = scrapboardItems(true).find(entry => entry.key === key);
+    if (!item)
+        return '';
+    const categoryKey = scrapboardItemCategoryKey(key), token = catalogActionToken(key), toggleLabel = item.active ? 'Deactivate' : 'Activate';
+    const categories = scrapboardCategoryEntries(true);
+    return `<div class="edit-modal scrap-catalog-modal" role="dialog" aria-modal="true" aria-labelledby="scrap_item_editor_title"><div class="summary-modal-head"><div><div class="eyebrow">Catalog management</div><h2 id="scrap_item_editor_title">Edit item</h2></div><button type="button" class="modal-close" onclick="closeScrapboardCatalogEditor()" aria-label="Close">×</button></div><div class="form-grid"><div class="field span-2"><label for="scrap_item_label">Item name</label><input id="scrap_item_label" maxlength="100" value="${esc(item.label)}"></div><div class="field"><label for="scrap_item_category">Category</label><select id="scrap_item_category">${categories.map(category => `<option value="${esc(category.key)}" ${category.key === categoryKey ? 'selected' : ''}>${esc(category.label)}${category.active ? '' : ' (inactive)'}</option>`).join('')}</select></div><div class="field"><label for="scrap_item_unit">Buying unit</label><select id="scrap_item_unit"><option value="kg" ${item.unit === 'kg' ? 'selected' : ''}>kg</option><option value="pc" ${item.unit === 'pc' ? 'selected' : ''}>pc</option></select></div></div><p class="form-note">Deactivated items remain available in transaction history but cannot be selected for new purchases.</p><div class="form-actions scrap-catalog-modal-actions">${scrapboardItemCanDelete(key) ? `<button type="button" class="btn danger" onclick="confirmDeleteScrapboardItem('${token}')">Delete permanently</button>` : ''}<button type="button" class="btn secondary" onclick="toggleScrapboardItem('${token}')">${toggleLabel}</button><button type="button" class="btn" onclick="saveScrapboardItemEditor('${token}')">Save item</button></div></div>`;
+}
+function closeScrapboardCatalogEditor() { document.getElementById('scrapboard_catalog_editor')?.remove(); }
+function openScrapboardCatalogModal(markup) {
+    if (!isAdmin() || !markup)
+        return;
+    closeScrapboardCatalogEditor();
+    const modal = document.createElement('div');
+    modal.id = 'scrapboard_catalog_editor';
+    modal.className = 'modal-backdrop';
+    modal.innerHTML = markup;
+    modal.addEventListener('click', event => { if (event.target === modal)
+        closeScrapboardCatalogEditor(); });
+    document.body.appendChild(modal);
+    modal.querySelector('input')?.focus();
+}
+function openScrapboardCategoryEditor(token) { openScrapboardCatalogModal(scrapboardCategoryEditorMarkup(decodeURIComponent(token))); }
+function openScrapboardItemEditor(token) { openScrapboardCatalogModal(scrapboardItemEditorMarkup(decodeURIComponent(token))); }
+async function saveScrapboardCategoryEditor(token) {
+    const key = decodeURIComponent(token), category = scrapboardCategoryEntry(key, true), label = normalizedCatalogName(val('scrap_category_label'));
+    if (!category || !label) {
+        toast('Enter a category name');
+        return;
+    }
+    if (!await editScrapboardCategory(key, { label, active: category.active })) {
+        toast('Category was not saved. Check for a duplicate name.');
+        return;
+    }
+    closeScrapboardCatalogEditor();
+    render();
+    toast(`${label} category saved`);
+}
+async function toggleScrapboardCategory(token) {
+    const key = decodeURIComponent(token), category = scrapboardCategoryEntry(key, true);
+    if (!category)
+        return;
+    if (!await editScrapboardCategory(key, { label: category.label, active: !category.active })) {
+        toast('Category status was not changed');
+        return;
+    }
+    closeScrapboardCatalogEditor();
+    render();
+    toast(`Category ${category.active ? 'deactivated' : 'activated'}`);
+}
+async function saveScrapboardItemEditor(token) {
+    const key = decodeURIComponent(token), item = scrapboardItems(true).find(entry => entry.key === key), label = normalizedCatalogName(val('scrap_item_label')), group = val('scrap_item_category'), unit = val('scrap_item_unit');
+    if (!item || !label) {
+        toast('Enter an item name');
+        return;
+    }
+    if (!await editScrapboardItem(key, { label, group, unit, active: item.active })) {
+        toast('Item was not saved. Check for a duplicate name.');
+        return;
+    }
+    closeScrapboardCatalogEditor();
+    render();
+    toast(`${label} saved`);
+}
+async function toggleScrapboardItem(token) {
+    const key = decodeURIComponent(token), item = scrapboardItems(true).find(entry => entry.key === key);
+    if (!item)
+        return;
+    if (!await editScrapboardItem(key, { label: item.label, group: scrapboardItemCategoryKey(key), unit: item.unit, active: !item.active })) {
+        toast('Item status was not changed');
+        return;
+    }
+    closeScrapboardCatalogEditor();
+    render();
+    toast(`Item ${item.active ? 'deactivated' : 'activated'}`);
+}
+async function confirmDeleteScrapboardItem(token) {
+    const key = decodeURIComponent(token), item = scrapboardItems(true).find(entry => entry.key === key);
+    if (!item || !confirm(`Permanently delete “${item.label}”?`))
+        return;
+    if (!await deleteScrapboardItem(key)) {
+        toast('This item cannot be deleted because it is built-in or used in history');
+        return;
+    }
+    closeScrapboardCatalogEditor();
+    render();
+    toast(`${item.label} permanently deleted`);
+}
+async function confirmDeleteScrapboardCategory(token) {
+    const key = decodeURIComponent(token), category = scrapboardCategoryEntry(key, true);
+    if (!category || !confirm(`Permanently delete “${category.label}”?`))
+        return;
+    if (!await deleteScrapboardCategory(key)) {
+        toast('Only an empty custom category can be permanently deleted');
+        return;
+    }
+    closeScrapboardCatalogEditor();
+    render();
+    toast(`${category.label} permanently deleted`);
+}
 function renderRates() {
     const editable = canEditDailyRates();
     const groups = scrapboardRateGroups();
@@ -1413,7 +1545,7 @@ function renderRates() {
   ${isAdmin() ? `<section class="scrap-quick-add"><div><div class="eyebrow">Quick add</div><h2>Add categories and buying items</h2><p>New items are saved to the shared rate list and appear automatically on the Buying page.</p></div><div class="scrap-quick-add-grid">
     <div class="scrap-quick-add-form"><h3>New category</h3><div class="field"><label for="quick_add_category_name">Category name</label><input id="quick_add_category_name" maxlength="80" placeholder="e.g. Charger boards"></div><button class="btn secondary small" type="button" onclick="submitScrapboardCategory()">Add category</button></div>
     <div class="scrap-quick-add-form"><h3>New item</h3><div class="field"><label for="quick_add_item_category">Category</label><select id="quick_add_item_category">${scrapboardCategories().map(category => `<option value="${esc(category)}">${esc(category)}</option>`).join('')}</select></div><div class="field"><label for="quick_add_item_name">Item name</label><input id="quick_add_item_name" maxlength="100" placeholder="e.g. Type-C port"></div><div class="scrap-quick-add-row"><div class="field"><label for="quick_add_item_unit">Unit</label><select id="quick_add_item_unit"><option value="kg">kg</option><option value="pc">pc</option></select></div><div class="field"><label for="quick_add_item_rate">Starting rate</label><input id="quick_add_item_rate" type="number" min="1" step="1" placeholder="0"></div></div><button class="btn secondary small" type="button" onclick="submitScrapboardItem()">Add item</button></div>
-  </div></section>` : ''}
+  </div></section>${scrapboardCatalogManagementMarkup()}` : ''}
   ${Object.entries(groups).map(([group, items]) => `<section class="scrap-rate-section"><h3>${esc(group)}</h3><div class="scrap-rate-grid">
     ${items.map(item => `<div class="scrap-rate-card"><div><label for="scrap_rate_${item.key}">${esc(item.label)}</label><small>Philippine peso / ${item.unit}</small></div><div class="scrap-rate-input"><span>₱</span><input id="scrap_rate_${item.key}" type="number" min="1" step="1" value="${roundPeso(db.pricing.scrapboardRates?.[item.key] || item.rate)}" ${editable ? '' : 'readonly aria-readonly="true"'}></div></div>`).join('')}
   </div></section>`).join('')}
@@ -1424,7 +1556,7 @@ async function saveScrapboardRates() {
         toast('Daily rates are locked by the administrator');
         return;
     }
-    const next = {};
+    const next = { ...(db.pricing.scrapboardRates || {}) };
     for (const item of scrapboardItems()) {
         const rate = roundPeso(Number(val(`scrap_rate_${item.key}`)));
         if (!Number.isFinite(rate) || rate <= 0) {

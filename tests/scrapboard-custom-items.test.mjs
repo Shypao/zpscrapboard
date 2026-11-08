@@ -33,6 +33,8 @@ async function loadCustomItemApi() {
       categoryEntries: (includeInactive = false) => Array.from(scrapboardCategoryEntries(includeInactive), category => ({ ...category })),
       renderRates: () => renderRates(),
       renderBuying: () => renderBuying(),
+      categoryEditor: key => scrapboardCategoryEditorMarkup(key),
+      itemEditor: key => scrapboardItemEditorMarkup(key),
       lookup: key => ({ ...scrapboardItem(key) }),
       label: key => gradeLabel('Scrapboard', key),
       activeRate: key => ({ ...activeRate('Scrapboard', key) }),
@@ -203,6 +205,72 @@ test('Daily Rates shows Quick Add only to administrators', async () => {
   api.setStaff();
   const staffHtml = api.renderRates();
   assert.doesNotMatch(staffHtml, /Quick add|Add category|Add item/);
+});
+
+test('Daily Rates renders compact category and item management only for administrators', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  const adminHtml = api.renderRates();
+  assert.match(adminHtml, /Catalog management/);
+  assert.match(adminHtml, /Manage category/);
+  assert.match(adminHtml, /Edit item/);
+  assert.match(adminHtml, /openScrapboardCategoryEditor/);
+  assert.match(adminHtml, /openScrapboardItemEditor/);
+
+  api.setStaff();
+  const staffHtml = api.renderRates();
+  assert.doesNotMatch(staffHtml, /Catalog management|Manage category|Edit item/);
+});
+
+test('category editor exposes rename deactivate and conditional permanent delete actions', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  await api.addCategory('Empty Custom');
+
+  const builtIn = api.categoryEditor('Whole boards');
+  assert.match(builtIn, /Edit category/);
+  assert.match(builtIn, /value="Whole boards"/);
+  assert.match(builtIn, />Deactivate</);
+  assert.doesNotMatch(builtIn, /Delete permanently/);
+
+  const custom = api.categoryEditor('Empty Custom');
+  assert.match(custom, /Delete permanently/);
+  await api.editCategory('Empty Custom', { label: 'Empty Custom', active: false });
+  assert.match(api.categoryEditor('Empty Custom'), />Activate</);
+});
+
+test('item editor exposes label category unit active state and safe delete rules', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  await api.addCategory('Editable Parts');
+  await api.addItem('Editable Parts', 'Editable Chip', 'pc', 40);
+  const key = api.customItems()[0].key;
+
+  const builtIn = api.itemEditor('A6');
+  assert.match(builtIn, /Edit item/);
+  assert.match(builtIn, /value="A6"/);
+  assert.match(builtIn, /value="kg" selected/);
+  assert.match(builtIn, />Deactivate</);
+  assert.doesNotMatch(builtIn, /Delete permanently/);
+
+  assert.match(api.itemEditor(key), /Delete permanently/);
+  api.referenceItem(key);
+  assert.doesNotMatch(api.itemEditor(key), /Delete permanently/);
+  await api.editItem(key, { label: 'Editable Chip', group: 'Editable Parts', unit: 'pc', active: false });
+  assert.match(api.itemEditor(key), />Activate</);
+});
+
+test('inactive definitions remain visible in management while disappearing from rates buying and export', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  await api.editItem('A6', { label: 'A6', group: 'IC chips · A series', unit: 'kg', active: false });
+
+  const rates = api.renderRates();
+  assert.match(rates, /Catalog management/);
+  assert.match(rates, /A6[^]*Inactive/);
+  assert.doesNotMatch(rates, /id="scrap_rate_A6"/);
+  assert.doesNotMatch(api.renderBuying(), /option value="A6"/);
+  assert.equal(api.exportRows().some(row => row.classification === 'A6'), false);
 });
 
 test('new custom item renders as a Daily Rates card in its category', async () => {
