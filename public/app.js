@@ -1563,7 +1563,7 @@ function renderRates() {
   </section>
   ${isAdmin() ? `<section class="scrap-quick-add"><div><div class="eyebrow">Quick add</div><h2>Add categories and buying items</h2><p>New items are saved to the shared rate list and appear automatically on the Buying page.</p></div><div class="scrap-quick-add-grid">
     <div class="scrap-quick-add-form"><h3>New category</h3><div class="field"><label for="quick_add_category_name">Category name</label><input id="quick_add_category_name" maxlength="80" placeholder="e.g. Charger boards"></div><button class="btn secondary small" type="button" onclick="submitScrapboardCategory()">Add category</button></div>
-    <div class="scrap-quick-add-form"><h3>New item</h3><div class="field"><label for="quick_add_item_category">Category</label><select id="quick_add_item_category">${scrapboardCategories().map(category => `<option value="${esc(category)}">${esc(category)}</option>`).join('')}</select></div><div class="field"><label for="quick_add_item_name">Item name</label><input id="quick_add_item_name" maxlength="100" placeholder="e.g. Type-C port"></div><div class="scrap-quick-add-row"><div class="field"><label for="quick_add_item_unit">Unit</label><select id="quick_add_item_unit"><option value="kg">kg</option><option value="pc">pc</option></select></div><div class="field"><label for="quick_add_item_rate">Starting rate</label><input id="quick_add_item_rate" type="number" min="1" step="1" placeholder="0"></div></div><button class="btn secondary small" type="button" onclick="submitScrapboardItem()">Add item</button></div>
+    <div class="scrap-quick-add-form"><h3>New item</h3><div class="field"><label for="quick_add_item_category">Category</label><select id="quick_add_item_category">${scrapboardCategoryEntries().map(category => `<option value="${esc(category.key)}">${esc(category.label)}</option>`).join('')}</select></div><div class="field"><label for="quick_add_item_name">Item name</label><input id="quick_add_item_name" maxlength="100" placeholder="e.g. Type-C port"></div><div class="scrap-quick-add-row"><div class="field"><label for="quick_add_item_unit">Unit</label><select id="quick_add_item_unit"><option value="kg">kg</option><option value="pc">pc</option></select></div><div class="field"><label for="quick_add_item_rate">Starting rate</label><input id="quick_add_item_rate" type="number" min="1" step="1" placeholder="0"></div></div><button class="btn secondary small" type="button" onclick="submitScrapboardItem()">Add item</button></div>
   </div></section>${scrapboardCatalogManagementMarkup()}` : ''}
   ${Object.entries(groups).map(([group, items]) => `<section class="scrap-rate-section"><h3>${esc(group)}</h3><div class="scrap-rate-grid">
     ${items.map(item => `<div class="scrap-rate-card"><div><label for="scrap_rate_${item.key}">${esc(item.label)}</label><small>Philippine peso / ${item.unit}</small></div><div class="scrap-rate-input"><span>₱</span><input id="scrap_rate_${item.key}" type="number" min="1" step="1" value="${roundPeso(db.pricing.scrapboardRates?.[item.key] || item.rate)}" ${editable ? '' : 'readonly aria-readonly="true"'}></div></div>`).join('')}
@@ -1613,6 +1613,7 @@ async function submitScrapboardCategory() {
 }
 async function submitScrapboardItem() {
     const category = val('quick_add_item_category'), name = normalizedCatalogName(val('quick_add_item_name')), unit = val('quick_add_item_unit'), rate = Number(val('quick_add_item_rate'));
+    const categoryEntry = scrapboardCategoryEntry(category);
     if (!name) {
         toast('Enter an item name');
         document.getElementById('quick_add_item_name')?.focus();
@@ -1623,7 +1624,11 @@ async function submitScrapboardItem() {
         document.getElementById('quick_add_item_rate')?.focus();
         return;
     }
-    if (scrapboardItems().some(item => String(item.group).toLowerCase() === category.toLowerCase() && String(item.label).toLowerCase() === name.toLowerCase())) {
+    if (!categoryEntry) {
+        toast('Choose a valid category');
+        return;
+    }
+    if (scrapboardItems().some(item => String(item.group).toLowerCase() === categoryEntry.label.toLowerCase() && String(item.label).toLowerCase() === name.toLowerCase())) {
         toast('That item already exists in this category');
         return;
     }
@@ -1632,7 +1637,7 @@ async function submitScrapboardItem() {
         return;
     }
     render();
-    toast(`${name} added to ${category}`);
+    toast(`${name} added to ${categoryEntry.label}`);
 }
 function renderRateDownloadButton() {
     const icon = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 15v4h14v-4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;

@@ -163,17 +163,17 @@ export function validateCatalogManagementCandidate(state:Record<string,any>,cand
     if(categorySettings[key]?.active!==undefined&&typeof categorySettings[key].active!=='boolean')throw new Error('Invalid category active state');
   }
 
-  const customItems=pricingCustomItems(candidate),customItemKeys=new Set<string>();
+  const customItems=pricingCustomItems(candidate),customItemKeys=new Set<string>(),itemSettings=pricingCatalogSettings(candidate,'scrapboardItemSettings');
   for(const item of customItems){
-    const key=String(item.key||'');
+    const key=String(item.key||''),setting=itemSettings[key]||{};
     if(!key||customItemKeys.has(key)||Object.prototype.hasOwnProperty.call(DEFAULT_SCRAPBOARD_RATES,key))throw new Error('Duplicate or invalid item key');
     customItemKeys.add(key);
-    if(!normalizedCatalogLabel(item.label))throw new Error('Invalid item label');
-    if(!['kg','pc'].includes(String(item.unit)))throw new Error('Invalid item unit');
-    if(!categoryKeys.includes(String(item.group)))throw new Error('Invalid item category');
+    if(!normalizedCatalogLabel(setting.label||item.label))throw new Error('Invalid item label');
+    if(!['kg','pc'].includes(String(setting.unit||item.unit)))throw new Error('Invalid item unit');
+    if(!categoryKeys.includes(String(setting.group||item.group)))throw new Error('Invalid item category');
   }
   const allItems=[...DEFAULT_SCRAPBOARD_ITEMS,...customItems.map(item=>({key:String(item.key),label:normalizedCatalogLabel(item.label),group:String(item.group),unit:String(item.unit) as 'kg'|'pc'}))];
-  const itemKeys=new Set(allItems.map(item=>item.key)),itemSettings=pricingCatalogSettings(candidate,'scrapboardItemSettings');
+  const itemKeys=new Set(allItems.map(item=>item.key));
   if(Object.keys(itemSettings).some(key=>!itemKeys.has(key)))throw new Error('Invalid item setting');
   const itemLabelsByCategory=new Set<string>();
   for(const item of allItems){

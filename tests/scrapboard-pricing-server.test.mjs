@@ -132,6 +132,19 @@ test('catalog management rejects invalid custom item units and missing groups', 
   assert.match(result.message, /unit|category/i);
 });
 
+test('catalog management allows deleting a custom category after its last item moved by override', () => {
+  const movedCurrent = structuredClone(currentPricing);
+  movedCurrent.scrapboardItemSettings = { CUSTOM_NEW: { label: 'New', group: 'Whole boards', unit: 'pc', active: true } };
+  const candidate = structuredClone(movedCurrent);
+  candidate.customScrapboardCategories = [];
+  const result = serverPricingProbe(`
+    let message = '';
+    try { server.validateCatalogManagementCandidate({ pricing: ${JSON.stringify(movedCurrent)} }, ${JSON.stringify(candidate)}); } catch (error) { message = error.message; }
+    process.stdout.write(JSON.stringify({ message }));
+  `);
+  assert.equal(result.message, '');
+});
+
 test('pricing revision guard rejects stale writes', () => {
   const result = serverPricingProbe(`
     let message = '';

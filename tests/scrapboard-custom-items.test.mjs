@@ -293,6 +293,19 @@ test('stable category keys win over renamed labels when resolving item groups', 
   assert.equal(api.catalog(true).find(item => item.key === 'A6').group, 'Whole boards');
 });
 
+test('Quick Add submits stable category keys when display labels overlap old keys', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  await api.editCategory('Whole boards', { label: 'Main boards', active: true });
+  await api.editCategory('IC chips · A series', { label: 'Whole boards', active: true });
+
+  const html = api.renderRates();
+  assert.match(html, /<option value="IC chips · A series">Whole boards<\/option>/);
+  assert.match(html, /<option value="Whole boards">Main boards<\/option>/);
+  assert.equal(await api.addItem('IC chips · A series', 'Stable Key Chip', 'pc', 25), true);
+  assert.equal(api.catalog(true).find(item => item.label === 'Stable Key Chip').group, 'Whole boards');
+});
+
 test('Quick Add rejects duplicates of inactive category keys and labels', async () => {
   const api = await loadCustomItemApi();
   api.setAdmin();
