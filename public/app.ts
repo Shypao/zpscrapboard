@@ -1130,6 +1130,20 @@ function scrapboardRateGroups(){
     return groups;
   },initial);
 }
+function scrapboardRateSections(entries=Object.entries(scrapboardRateGroups())){
+  const sections=[];
+  let icSection=null;
+  entries.forEach(([group,items])=>{
+    const match=String(group).match(/^IC chips\s*(?:·|:|-)\s*(.+)$/i);
+    if(match){
+      if(!icSection){icSection={label:'IC chips',groups:[]};sections.push(icSection);}
+      icSection.groups.push({label:match[1].trim(),items});
+      return;
+    }
+    sections.push({label:group,groups:[{label:'',items}]});
+  });
+  return sections;
+}
 function catalogActionToken(value){ return encodeURIComponent(String(value)).replace(/'/g,'%27'); }
 function scrapboardCategoryCanDelete(key){
   const category=scrapboardCategoryEntry(key,true);
@@ -1205,6 +1219,7 @@ async function confirmDeleteScrapboardCategory(token){
 function renderRates(){
   const editable=canEditDailyRates();
   const groups=scrapboardRateGroups();
+  const sections=scrapboardRateSections(Object.entries(groups));
   return `<section class="scrap-rate-hero">
     <div><div class="eyebrow">SCRAPBOARD BUYING GUIDE</div><h2>Daily buying rates</h2><p>These are the active prices used automatically on the Buying page. Rates marked / kg use kilograms; rates marked / pc use individual pieces.</p></div>
     <div class="scrap-rate-hero-tools"><div class="scrap-rate-date"><small>Effective date</small><br><strong>${fmtDate(db.pricing.effectiveDate||todayStr())}</strong></div>${renderScrapboardRateDownloadButtons()}</div>
@@ -1213,9 +1228,9 @@ function renderRates(){
     <div class="scrap-quick-add-form"><h3>New category</h3><div class="field"><label for="quick_add_category_name">Category name</label><input id="quick_add_category_name" maxlength="80" placeholder="e.g. Charger boards"></div><button class="btn secondary small" type="button" onclick="submitScrapboardCategory()">Add category</button></div>
     <div class="scrap-quick-add-form"><h3>New item</h3><div class="field"><label for="quick_add_item_category">Category</label><select id="quick_add_item_category">${scrapboardCategoryEntries().map(category=>`<option value="${esc(category.key)}">${esc(category.label)}</option>`).join('')}</select></div><div class="field"><label for="quick_add_item_name">Item name</label><input id="quick_add_item_name" maxlength="100" placeholder="e.g. Type-C port"></div><div class="scrap-quick-add-row"><div class="field"><label for="quick_add_item_unit">Unit</label><select id="quick_add_item_unit"><option value="kg">kg</option><option value="pc">pc</option></select></div><div class="field"><label for="quick_add_item_rate">Starting rate</label><input id="quick_add_item_rate" type="number" min="1" step="1" placeholder="0"></div></div><button class="btn secondary small" type="button" onclick="submitScrapboardItem()">Add item</button></div>
   </div></section>${scrapboardCatalogManagementMarkup()}`:''}
-  ${Object.entries(groups).map(([group,items])=>`<section class="scrap-rate-section"><h3>${esc(group)}</h3><div class="scrap-rate-grid">
-    ${items.map(item=>`<div class="scrap-rate-card"><div><label for="scrap_rate_${item.key}">${esc(item.label)}</label><small>Philippine peso / ${item.unit}</small></div><div class="scrap-rate-input"><span>₱</span><input id="scrap_rate_${item.key}" type="number" min="1" step="1" value="${roundPeso(db.pricing.scrapboardRates?.[item.key]||item.rate)}" ${editable?'':'readonly aria-readonly="true"'}></div></div>`).join('')}
-  </div></section>`).join('')}
+  ${sections.map(section=>`<section class="scrap-rate-section"><h3>${esc(section.label)}</h3>${section.groups.map(group=>`<div class="scrap-rate-subsection">${group.label?`<h4>${esc(group.label)}</h4>`:''}<div class="scrap-rate-grid">
+    ${group.items.map(item=>`<div class="scrap-rate-card"><div><label for="scrap_rate_${item.key}">${esc(item.label)}</label><small>Philippine peso / ${item.unit}</small></div><div class="scrap-rate-input"><span>₱</span><input id="scrap_rate_${item.key}" type="number" min="1" step="1" value="${roundPeso(db.pricing.scrapboardRates?.[item.key]||item.rate)}" ${editable?'':'readonly aria-readonly="true"'}></div></div>`).join('')}
+  </div></div>`).join('')}</section>`).join('')}
   <div class="scrap-rate-actions"><span class="form-note">${editable?'Changes apply to new buying transactions.':'Rates are locked by the administrator.'}</span>${editable?'<button class="btn" onclick="saveScrapboardRates()">Save daily rates</button>':''}</div>`;
 }
 function renderScrapboardRateDownloadButtons(){
@@ -1224,6 +1239,7 @@ function renderScrapboardRateDownloadButtons(){
 }
 async function downloadScrapboardRateSheetImage(imageType:'png'|'jpg'='png'){
   const groups=Object.entries(scrapboardRateGroups());
+  const sections=scrapboardRateSections(groups);
   const rateSheetDate=db.pricing.effectiveDate||todayStr();
   const mimeType=imageType==='png'?'image/png':'image/jpeg';
   const imageLabel=imageType.toUpperCase();
@@ -1232,8 +1248,8 @@ async function downloadScrapboardRateSheetImage(imageType:'png'|'jpg'='png'){
   if(button){button.disabled=true;button.setAttribute('aria-busy','true');const label=button.querySelector('span');if(label)label.textContent='Generating…';}
   try{
     await document.fonts?.ready;
-    const width=2400,pad=54,columns=5,gap=16,cardHeight=128,headingHeight=60,sectionGap=28,headerHeight=220,footerHeight=80;
-    const contentHeight=groups.reduce((total,[,items])=>total+headingHeight+Math.ceil(items.length/columns)*(cardHeight+gap)+sectionGap,0);
+    const width=2400,pad=54,columns=5,gap=16,cardHeight=128,headingHeight=60,subheadingHeight=46,subsectionGap=18,sectionGap=28,headerHeight=220,footerHeight=80;
+    const contentHeight=sections.reduce((total,section)=>total+headingHeight+section.groups.reduce((subtotal,group)=>subtotal+(group.label?subheadingHeight:0)+Math.ceil(group.items.length/columns)*(cardHeight+gap)+subsectionGap,0)+sectionGap,0);
     const height=headerHeight+30+contentHeight+footerHeight;
     const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
     const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas is unavailable');
@@ -1253,25 +1269,30 @@ async function downloadScrapboardRateSheetImage(imageType:'png'|'jpg'='png'){
     text(`${scrapboardItems().length} ACTIVE BUYING ITEMS`,width-pad,159,'700 16px Arial, sans-serif',colors.accent,'right');
     const cardWidth=(width-pad*2-gap*(columns-1))/columns;
     let y=headerHeight+30;
-    for(const [group,items] of groups){
+    for(const section of sections){
       ctx.beginPath();ctx.fillStyle=colors.accent;ctx.arc(pad+10,y+13,10,0,Math.PI*2);ctx.fill();
-      text(group,pad+34,y+22,'700 28px Georgia, serif');
-      const groupWidth=ctx.measureText(group).width;
-      text(`${items.length} ITEM${items.length===1?'':'S'}`,pad+54+groupWidth,y+19,'700 14px Arial, sans-serif',colors.soft);
-      ctx.beginPath();ctx.strokeStyle=colors.line;ctx.lineWidth=2;ctx.moveTo(pad+185+groupWidth,y+12);ctx.lineTo(width-pad,y+12);ctx.stroke();
-      const cardsY=y+headingHeight;
-      items.forEach((item,index)=>{
-        const column=index%columns,row=Math.floor(index/columns),x=pad+column*(cardWidth+gap),cardY=cardsY+row*(cardHeight+gap);
-        roundedRect(x,cardY,cardWidth,cardHeight,10);ctx.fillStyle=colors.card;ctx.fill();ctx.strokeStyle=colors.line;ctx.lineWidth=2;ctx.stroke();
-        ctx.fillStyle=colors.accent;ctx.fillRect(x,cardY,7,cardHeight);
-        const labelFont='700 20px Arial, sans-serif';text(clippedText(item.label,cardWidth-46,labelFont),x+22,cardY+37,labelFont,colors.soft);
-        text('₱',x+22,cardY+91,'700 26px Arial, sans-serif',colors.accentDeep);
-        const rate=roundPeso(db.pricing.scrapboardRates?.[item.key]||item.rate);
-        text(money(rate),x+57,cardY+94,'700 38px Arial, sans-serif');
-        text(`PER ${item.unit.toUpperCase()}`,x+cardWidth-21,cardY+91,'700 13px Arial, sans-serif',colors.soft,'right');
-        text('BUYING RATE',x+22,cardY+117,'700 12px Arial, sans-serif',colors.accentDeep);
-      });
-      y=cardsY+Math.ceil(items.length/columns)*(cardHeight+gap)+sectionGap;
+      text(section.label,pad+34,y+22,'700 28px Georgia, serif');
+      const sectionWidth=ctx.measureText(section.label).width,itemCount=section.groups.reduce((sum,group)=>sum+group.items.length,0);
+      text(`${itemCount} ITEM${itemCount===1?'':'S'}`,pad+54+sectionWidth,y+19,'700 14px Arial, sans-serif',colors.soft);
+      ctx.beginPath();ctx.strokeStyle=colors.line;ctx.lineWidth=2;ctx.moveTo(pad+185+sectionWidth,y+12);ctx.lineTo(width-pad,y+12);ctx.stroke();
+      y+=headingHeight;
+      for(const group of section.groups){
+        if(group.label){text(group.label,pad+8,y+25,'700 21px Arial, sans-serif',colors.accentDeep);text(`${group.items.length} items`,width-pad,y+24,'700 13px Arial, sans-serif',colors.soft,'right');y+=subheadingHeight;}
+        const cardsY=y;
+        group.items.forEach((item,index)=>{
+          const column=index%columns,row=Math.floor(index/columns),x=pad+column*(cardWidth+gap),cardY=cardsY+row*(cardHeight+gap);
+          roundedRect(x,cardY,cardWidth,cardHeight,10);ctx.fillStyle=colors.card;ctx.fill();ctx.strokeStyle=colors.line;ctx.lineWidth=2;ctx.stroke();
+          ctx.fillStyle=colors.accent;ctx.fillRect(x,cardY,7,cardHeight);
+          const labelFont='700 20px Arial, sans-serif';text(clippedText(item.label,cardWidth-46,labelFont),x+22,cardY+37,labelFont,colors.soft);
+          text('₱',x+22,cardY+91,'700 26px Arial, sans-serif',colors.accentDeep);
+          const rate=roundPeso(db.pricing.scrapboardRates?.[item.key]||item.rate);
+          text(money(rate),x+57,cardY+94,'700 38px Arial, sans-serif');
+          text(`PER ${item.unit.toUpperCase()}`,x+cardWidth-21,cardY+91,'700 13px Arial, sans-serif',colors.soft,'right');
+          text('BUYING RATE',x+22,cardY+117,'700 12px Arial, sans-serif',colors.accentDeep);
+        });
+        y=cardsY+Math.ceil(group.items.length/columns)*(cardHeight+gap)+subsectionGap;
+      }
+      y+=sectionGap;
     }
     ctx.beginPath();ctx.strokeStyle=colors.line;ctx.lineWidth=2;ctx.moveTo(pad,height-55);ctx.lineTo(width-pad,height-55);ctx.stroke();
     text('SCRAPBOARD TRADING  ·  DAILY BUYING RATE GUIDE',pad,height-25,'700 14px Arial, sans-serif',colors.soft);
