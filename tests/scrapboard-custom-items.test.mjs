@@ -31,6 +31,7 @@ async function loadCustomItemApi() {
       customItems: () => Array.from(db.pricing.customScrapboardItems || [], item => ({ ...item })),
       catalog: (includeInactive = false) => Array.from(scrapboardItems(includeInactive), item => ({ ...item })),
       categoryEntries: (includeInactive = false) => Array.from(scrapboardCategoryEntries(includeInactive), category => ({ ...category })),
+      actionToken: value => catalogActionToken(value),
       renderRates: () => renderRates(),
       renderBuying: () => renderBuying(),
       categoryEditor: key => scrapboardCategoryEditorMarkup(key),
@@ -273,6 +274,74 @@ test('inactive definitions remain visible in management while disappearing from 
   assert.equal(api.exportRows().some(row => row.classification === 'A6'), false);
 });
 
+test('category action tokens safely encode apostrophes used inside inline handlers', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  await api.addCategory("O'Reilly boards");
+
+  assert.equal(api.actionToken("O'Reilly boards").includes("'"), false);
+  assert.match(api.renderRates(), /openScrapboardCategoryEditor\('O%27Reilly%20boards'\)/);
+});
+
+test('stable category keys win over renamed labels when resolving item groups', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  await api.editCategory('Whole boards', { label: 'Main boards', active: true });
+  await api.editCategory('IC chips · A series', { label: 'Whole boards', active: true });
+
+  assert.equal(api.catalog(true).find(item => item.key === 'TABLET').group, 'Main boards');
+  assert.equal(api.catalog(true).find(item => item.key === 'A6').group, 'Whole boards');
+});
+
+test('Quick Add rejects duplicates of inactive category keys and labels', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  await api.editCategory('Whole boards', { label: 'Retired boards', active: false });
+
+  assert.equal(await api.addCategory(' whole   boards '), false);
+  assert.equal(await api.addCategory(' retired boards '), false);
+});
+
+test('item editor preserves the item enabled state while its category is inactive', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  await api.editCategory('IC chips · A series', { label: 'IC chips · A series', active: false });
+  const hidden = api.catalog(true).find(item => item.key === 'A6');
+  assert.equal(hidden.active, false);
+  assert.equal(hidden.ownActive, true);
+
+  await api.editItem('A6', { label: 'Renamed A6', group: 'IC chips · A series', unit: 'kg', active: hidden.ownActive });
+  await api.editCategory('IC chips · A series', { label: 'IC chips · A series', active: true });
+  const restored = api.catalog(true).find(item => item.key === 'A6');
+  assert.equal(restored.active, true);
+  assert.equal(restored.label, 'Renamed A6');
+});
+
+test('failed overlapping catalog save cannot roll back a later successful edit', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  const resolveFirst = api.queueSave();
+  const resolveSecond = api.queueSave();
+  const first = api.editItem('A6', { label: 'First edit', group: 'IC chips · A series', unit: 'kg', active: true });
+  const second = api.editItem('A5', { label: 'Second edit', group: 'IC chips · A series', unit: 'kg', active: true });
+
+  resolveSecond(true);
+  resolveFirst(false);
+  assert.deepEqual(await Promise.all([first, second]), [false, true]);
+  assert.equal(api.catalog(true).find(item => item.key === 'A5').label, 'Second edit');
+  assert.equal(api.catalog(true).find(item => item.key === 'A6').label, 'A6');
+});
+
+test('Buying falls back to the first active item when the saved selection is inactive', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  await api.editCategory('IC chips · A series', { label: 'IC chips · A series', active: false });
+
+  const html = api.renderBuying();
+  assert.match(html, /<option value="NC512" selected>NC 512/);
+  assert.match(html, /id="b_rate"[^>]*value="1370"/);
+});
+
 test('new custom item renders as a Daily Rates card in its category', async () => {
   const api = await loadCustomItemApi();
   api.setAdmin();
@@ -346,7 +415,7 @@ test('whole-peso catalog rejects fractional starting rates', async () => {
   assert.equal(api.customItems().length, 0);
 });
 
-test('failed overlapping save rolls back only its own category', async () => {
+test('serialized category saves keep a later successful addition after an earlier failure', async () => {
   const api = await loadCustomItemApi();
   api.setAdmin();
   const resolveFirst = api.queueSave();
@@ -354,8 +423,7 @@ test('failed overlapping save rolls back only its own category', async () => {
   const first = api.addCategory('First Pending');
   const second = api.addCategory('Second Saved');
   resolveSecond(true);
-  assert.equal(await second, true);
   resolveFirst(false);
-  assert.equal(await first, false);
+  assert.deepEqual(await Promise.all([first, second]), [false, true]);
   assert.deepEqual([...api.categories()], ['Second Saved']);
 });

@@ -402,7 +402,8 @@ function scrapboardCategoryEntries(includeInactive=false){
 }
 function scrapboardCategoryEntry(value,includeInactive=true){
   const normalized=normalizedCatalogName(value).toLowerCase();
-  return scrapboardCategoryEntries(includeInactive).find(category=>category.key.toLowerCase()===normalized||category.label.toLowerCase()===normalized)||null;
+  const entries=scrapboardCategoryEntries(includeInactive);
+  return entries.find(category=>category.key.toLowerCase()===normalized)||entries.find(category=>category.label.toLowerCase()===normalized)||null;
 }
 function scrapboardCategories(includeInactive=false){ return scrapboardCategoryEntries(includeInactive).map(category=>category.label); }
 function scrapboardItems(includeInactive=false){
@@ -410,12 +411,12 @@ function scrapboardItems(includeInactive=false){
   return rawScrapboardItems().map(item=>{
     const setting=catalogOwnSetting(itemSettings,item.key);
     const category=scrapboardCategoryEntry(setting.group||item.group,true)||scrapboardCategoryEntry(item.group,true);
-    const active=setting.active!==false&&category?.active!==false;
+    const ownActive=setting.active!==false,active=ownActive&&category?.active!==false;
     const resolved={...item,label:normalizedCatalogName(setting.label)||item.label,unit:['kg','pc'].includes(setting.unit)?setting.unit:item.unit,group:category?.label||item.group};
-    return {...resolved,active};
+    return {...resolved,ownActive,active};
   }).filter(item=>includeInactive||item.active).map(item=>{
     if(includeInactive)return item;
-    const {active,...resolved}=item;return resolved;
+    const {active,ownActive,...resolved}=item;return resolved;
   });
 }
 function scrapboardItemCategoryKey(key){
@@ -434,17 +435,23 @@ function customScrapboardKey(name){
   do{ key=`CUSTOM_${slug}_${Math.random().toString(36).slice(2,8).toUpperCase()}`; }while(used.has(key));
   return key;
 }
-async function addScrapboardCategory(name){
+let scrapboardCatalogMutationQueue=Promise.resolve();
+function queueScrapboardCatalogMutation(operation){
+  const result=scrapboardCatalogMutationQueue.then(operation,operation);
+  scrapboardCatalogMutationQueue=result.then(()=>undefined,()=>undefined);
+  return result;
+}
+function addScrapboardCategory(name){ return queueScrapboardCatalogMutation(async()=>{
   if(!isAdmin()) return false;
   const category=normalizedCatalogName(name);
-  if(!category||scrapboardCategories().some(value=>value.toLowerCase()===category.toLowerCase())) return false;
+  if(!category||scrapboardCategoryEntries(true).some(entry=>entry.key.toLowerCase()===category.toLowerCase()||entry.label.toLowerCase()===category.toLowerCase())) return false;
   const before=[...(db.pricing.customScrapboardCategories||[])];
   db.pricing.customScrapboardCategories=[...before,category];
   if(await savePricingDB(false,'catalog')) return true;
   db.pricing.customScrapboardCategories=(db.pricing.customScrapboardCategories||[]).filter(value=>value!==category);
   return false;
-}
-async function addScrapboardItem(category,name,unit,rate){
+}); }
+function addScrapboardItem(category,name,unit,rate){ return queueScrapboardCatalogMutation(async()=>{
   if(!isAdmin()) return false;
   const group=normalizedCatalogName(category),label=normalizedCatalogName(name),normalizedUnit=String(unit||'').toLowerCase(),numericRate=Number(rate);
   const resolvedCategory=scrapboardCategoryEntry(group);
@@ -458,7 +465,7 @@ async function addScrapboardItem(category,name,unit,rate){
   db.pricing.customScrapboardItems=(db.pricing.customScrapboardItems||[]).filter(value=>value.key!==item.key);
   if(!db.pricing.customScrapboardItems.some(value=>value.key===item.key)) delete db.pricing.scrapboardRates[item.key];
   return false;
-}
+}); }
 function scrapboardCatalogReferenced(key){
   const visit=value=>{
     if(value===key) return true;
@@ -478,7 +485,7 @@ function catalogPricingSnapshot(){
   }));
 }
 function restoreCatalogPricing(snapshot){ Object.assign(db.pricing,snapshot); }
-async function editScrapboardCategory(key,changes){
+function editScrapboardCategory(key,changes){ return queueScrapboardCatalogMutation(async()=>{
   if(!isAdmin()) return false;
   const category=scrapboardCategoryEntry(key,true),label=normalizedCatalogName(changes?.label);
   if(!category||!label) return false;
@@ -487,8 +494,8 @@ async function editScrapboardCategory(key,changes){
   db.pricing.scrapboardCategorySettings={...(db.pricing.scrapboardCategorySettings||{}),[category.key]:{label,active:changes?.active!==false}};
   if(await savePricingDB(false,'catalog-management')) return true;
   restoreCatalogPricing(before);return false;
-}
-async function editScrapboardItem(key,changes){
+}); }
+function editScrapboardItem(key,changes){ return queueScrapboardCatalogMutation(async()=>{
   if(!isAdmin()) return false;
   const current=scrapboardItems(true).find(item=>item.key===key),category=scrapboardCategoryEntry(changes?.group,true);
   const label=normalizedCatalogName(changes?.label),unit=String(changes?.unit||'').toLowerCase();
@@ -498,8 +505,8 @@ async function editScrapboardItem(key,changes){
   db.pricing.scrapboardItemSettings={...(db.pricing.scrapboardItemSettings||{}),[key]:{label,group:category.key,unit,active:changes?.active!==false}};
   if(await savePricingDB(false,'catalog-management')) return true;
   restoreCatalogPricing(before);return false;
-}
-async function deleteScrapboardItem(key){
+}); }
+function deleteScrapboardItem(key){ return queueScrapboardCatalogMutation(async()=>{
   if(!isAdmin()) return false;
   const custom=(db.pricing.customScrapboardItems||[]).find(item=>item.key===key);
   if(!custom||scrapboardCatalogReferenced(key)) return false;
@@ -509,8 +516,8 @@ async function deleteScrapboardItem(key){
   const rates={...(db.pricing.scrapboardRates||{})};delete rates[key];db.pricing.scrapboardRates=rates;
   if(await savePricingDB(false,'catalog-management')) return true;
   restoreCatalogPricing(before);return false;
-}
-async function deleteScrapboardCategory(key){
+}); }
+function deleteScrapboardCategory(key){ return queueScrapboardCatalogMutation(async()=>{
   if(!isAdmin()) return false;
   const category=scrapboardCategoryEntry(key,true);
   if(!category?.custom) return false;
@@ -524,7 +531,7 @@ async function deleteScrapboardCategory(key){
   const settings={...(db.pricing.scrapboardCategorySettings||{})};delete settings[category.key];db.pricing.scrapboardCategorySettings=settings;
   if(await savePricingDB(false,'catalog-management')) return true;
   restoreCatalogPricing(before);return false;
-}
+}); }
 const GRADE_META = { Gold: GOLD_GRADES, Silver: SILVER_GRADES, Platinum: PLATINUM_GRADES };
 const GRADES = Object.fromEntries(Object.entries(GRADE_META).map(([metal,grades])=>[metal,grades.map(g=>g.key)]));
 
@@ -1124,7 +1131,7 @@ function scrapboardRateGroups(){
     return groups;
   },initial);
 }
-function catalogActionToken(value){ return encodeURIComponent(String(value)); }
+function catalogActionToken(value){ return encodeURIComponent(String(value)).replace(/'/g,'%27'); }
 function scrapboardCategoryCanDelete(key){
   const category=scrapboardCategoryEntry(key,true);
   return Boolean(category?.custom&&!scrapboardCategoryItems(category.key).length);
@@ -1148,7 +1155,7 @@ function scrapboardCategoryEditorMarkup(key){
 function scrapboardItemEditorMarkup(key){
   const item=scrapboardItems(true).find(entry=>entry.key===key);
   if(!item) return '';
-  const categoryKey=scrapboardItemCategoryKey(key),token=catalogActionToken(key),toggleLabel=item.active?'Deactivate':'Activate';
+  const categoryKey=scrapboardItemCategoryKey(key),token=catalogActionToken(key),toggleLabel=item.ownActive?'Deactivate':'Activate';
   const categories=scrapboardCategoryEntries(true);
   return `<div class="edit-modal scrap-catalog-modal" role="dialog" aria-modal="true" aria-labelledby="scrap_item_editor_title"><div class="summary-modal-head"><div><div class="eyebrow">Catalog management</div><h2 id="scrap_item_editor_title">Edit item</h2></div><button type="button" class="modal-close" onclick="closeScrapboardCatalogEditor()" aria-label="Close">×</button></div><div class="form-grid"><div class="field span-2"><label for="scrap_item_label">Item name</label><input id="scrap_item_label" maxlength="100" value="${esc(item.label)}"></div><div class="field"><label for="scrap_item_category">Category</label><select id="scrap_item_category">${categories.map(category=>`<option value="${esc(category.key)}" ${category.key===categoryKey?'selected':''}>${esc(category.label)}${category.active?'':' (inactive)'}</option>`).join('')}</select></div><div class="field"><label for="scrap_item_unit">Buying unit</label><select id="scrap_item_unit"><option value="kg" ${item.unit==='kg'?'selected':''}>kg</option><option value="pc" ${item.unit==='pc'?'selected':''}>pc</option></select></div></div><p class="form-note">Deactivated items remain available in transaction history but cannot be selected for new purchases.</p><div class="form-actions scrap-catalog-modal-actions">${scrapboardItemCanDelete(key)?`<button type="button" class="btn danger" onclick="confirmDeleteScrapboardItem('${token}')">Delete permanently</button>`:''}<button type="button" class="btn secondary" onclick="toggleScrapboardItem('${token}')">${toggleLabel}</button><button type="button" class="btn" onclick="saveScrapboardItemEditor('${token}')">Save item</button></div></div>`;
 }
@@ -1176,13 +1183,13 @@ async function toggleScrapboardCategory(token){
 async function saveScrapboardItemEditor(token){
   const key=decodeURIComponent(token),item=scrapboardItems(true).find(entry=>entry.key===key),label=normalizedCatalogName(val('scrap_item_label')),group=val('scrap_item_category'),unit=val('scrap_item_unit');
   if(!item||!label){toast('Enter an item name');return;}
-  if(!await editScrapboardItem(key,{label,group,unit,active:item.active})){toast('Item was not saved. Check for a duplicate name.');return;}
+  if(!await editScrapboardItem(key,{label,group,unit,active:item.ownActive})){toast('Item was not saved. Check for a duplicate name.');return;}
   closeScrapboardCatalogEditor();render();toast(`${label} saved`);
 }
 async function toggleScrapboardItem(token){
   const key=decodeURIComponent(token),item=scrapboardItems(true).find(entry=>entry.key===key);if(!item)return;
-  if(!await editScrapboardItem(key,{label:item.label,group:scrapboardItemCategoryKey(key),unit:item.unit,active:!item.active})){toast('Item status was not changed');return;}
-  closeScrapboardCatalogEditor();render();toast(`Item ${item.active?'deactivated':'activated'}`);
+  if(!await editScrapboardItem(key,{label:item.label,group:scrapboardItemCategoryKey(key),unit:item.unit,active:!item.ownActive})){toast('Item status was not changed');return;}
+  closeScrapboardCatalogEditor();render();toast(`Item ${item.ownActive?'deactivated':'activated'}`);
 }
 async function confirmDeleteScrapboardItem(token){
   const key=decodeURIComponent(token),item=scrapboardItems(true).find(entry=>entry.key===key);if(!item||!confirm(`Permanently delete “${item.label}”?`))return;
@@ -1225,7 +1232,7 @@ async function saveScrapboardRates(){
 async function submitScrapboardCategory(){
   const input=document.getElementById('quick_add_category_name'),name=normalizedCatalogName(input?.value);
   if(!name){toast('Enter a category name');input?.focus();return;}
-  if(scrapboardCategories().some(category=>category.toLowerCase()===name.toLowerCase())){toast('That category already exists');input?.focus();return;}
+  if(scrapboardCategoryEntries(true).some(category=>category.key.toLowerCase()===name.toLowerCase()||category.label.toLowerCase()===name.toLowerCase())){toast('That category already exists');input?.focus();return;}
   if(!await addScrapboardCategory(name)){toast('Category was not saved');return;}
   render();toast(`${name} category added`);
 }
@@ -5317,7 +5324,7 @@ function renderReports(){
 function scrapboardItem(key){
   const resolved=scrapboardItems(true).find(item=>item.key===key);
   if(!resolved)return SCRAPBOARD_ITEMS[0];
-  const {active,...item}=resolved;return item;
+  const {active,ownActive,...item}=resolved;return item;
 }
 function purchaseQuantityLabel(item){
   const fallbackQuantity=item.unit==='kg'?Number(item.netWeight||0)/1000:Number(item.netWeight||0);
@@ -5326,11 +5333,13 @@ function purchaseQuantityLabel(item){
 }
 function renderBuying(){
   rollDefaultBuyingDraftDateForward();
+  const activeItems=scrapboardItems();
+  if(!activeItems.length) return `<div id="buying_cashflow_card">${cashflowCardMarkup()}</div><section class="block"><h2 class="block-title">No active scrapboard items</h2><p class="form-note">Ask an administrator to activate an item in Daily Rates before recording a purchase.</p></section>`;
   const sellerName=buyingDraftValue('b_seller_name');
   const savedCustomer=db.customers.find(customer=>String(customer.name).trim().toLowerCase()===sellerName.trim().toLowerCase());
   const customerStatus=!sellerName?'Optional — leave blank for a walk-in seller.':savedCustomer?`Using saved seller: ${savedCustomer.name}`:`“${sellerName}” will be saved as a new seller.`;
   const requested=buyingDraftValue('b_karat');
-  const key=scrapboardItems().some(item=>item.key===requested)?requested:SCRAPBOARD_ITEMS[0].key;
+  const key=activeItems.some(item=>item.key===requested)?requested:activeItems[0].key;
   const item=scrapboardItem(key),rateObj=activeRate('Scrapboard',key);
   const quantityValue=buyingDraftValue('b_gross'),quantity=parseFloat(quantityValue)||0;
   const systemRate=roundPeso(rateObj?.rate||0),enteredRate=buyingDraftValue('b_rate'),parsedRate=Number(enteredRate);

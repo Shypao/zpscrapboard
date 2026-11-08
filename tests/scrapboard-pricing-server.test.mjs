@@ -80,6 +80,58 @@ test('staff rate validation accepts persisted custom item keys without catalog c
   assert.deepEqual(result.customScrapboardItems, currentPricing.customScrapboardItems);
 });
 
+test('legacy pricing passes through the internal update pipeline for staff saves', () => {
+  const candidate = structuredClone(currentPricing);
+  candidate.scrapboardRates.A6 = 1600;
+  const result = serverPricingProbe(`
+    const current = ${JSON.stringify(currentPricing)};
+    const candidate = ${JSON.stringify(candidate)};
+    const isolated = server.isolatedPricingUpdate(current, candidate, 'internal');
+    let output;
+    try { output = { pricing: server.staffEditablePricing(current, isolated) }; }
+    catch (error) { output = { error: error.message }; }
+    process.stdout.write(JSON.stringify(output));
+  `);
+  assert.equal(result.error, undefined);
+  assert.equal(result.pricing.scrapboardRates.A6, 1600);
+});
+
+test('catalog management rejects deletion of a historically referenced custom item', () => {
+  const candidate = structuredClone(currentPricing);
+  candidate.customScrapboardItems = [];
+  candidate.scrapboardRates = { A6: 1500 };
+  const result = serverPricingProbe(`
+    const state = { pricing: ${JSON.stringify(currentPricing)}, stock: [{ id: 'stock-1', metal: 'Scrapboard', karat: 'CUSTOM_NEW' }] };
+    let message = '';
+    try { server.validateCatalogManagementCandidate(state, ${JSON.stringify(candidate)}); } catch (error) { message = error.message; }
+    process.stdout.write(JSON.stringify({ message }));
+  `);
+  assert.match(result.message, /used in history/i);
+});
+
+test('catalog management rejects duplicate normalized category labels', () => {
+  const candidate = structuredClone(currentPricing);
+  candidate.customScrapboardCategories = ['Custom', 'Second'];
+  candidate.scrapboardCategorySettings = { Custom: { label: 'Same Name', active: true }, Second: { label: ' same   name ', active: true } };
+  const result = serverPricingProbe(`
+    let message = '';
+    try { server.validateCatalogManagementCandidate({ pricing: ${JSON.stringify(currentPricing)} }, ${JSON.stringify(candidate)}); } catch (error) { message = error.message; }
+    process.stdout.write(JSON.stringify({ message }));
+  `);
+  assert.match(result.message, /duplicate category/i);
+});
+
+test('catalog management rejects invalid custom item units and missing groups', () => {
+  const candidate = structuredClone(currentPricing);
+  candidate.customScrapboardItems = [{ key: 'CUSTOM_NEW', label: 'New', group: 'Missing group', unit: 'box', rate: 25 }];
+  const result = serverPricingProbe(`
+    let message = '';
+    try { server.validateCatalogManagementCandidate({ pricing: ${JSON.stringify(currentPricing)} }, ${JSON.stringify(candidate)}); } catch (error) { message = error.message; }
+    process.stdout.write(JSON.stringify({ message }));
+  `);
+  assert.match(result.message, /unit|category/i);
+});
+
 test('pricing revision guard rejects stale writes', () => {
   const result = serverPricingProbe(`
     let message = '';
