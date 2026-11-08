@@ -1440,12 +1440,14 @@ function scrapboardCategoryCanDelete(key) {
 function scrapboardItemCanDelete(key) {
     return Boolean((db.pricing?.customScrapboardItems || []).some(item => item.key === key) && !scrapboardCatalogReferenced(key));
 }
+let scrapboardCatalogExpanded = false;
+function rememberScrapboardCatalogExpanded(expanded) { scrapboardCatalogExpanded = Boolean(expanded); }
 function scrapboardCatalogManagementMarkup() {
     const categories = scrapboardCategoryEntries(true);
-    return `<section class="scrap-catalog-manager"><div class="scrap-catalog-head"><div><div class="eyebrow">Catalog management</div><h2>Edit categories and items</h2><p>Rename, move, deactivate, or safely remove entries. Inactive entries stay in history but disappear from Buying and active rates.</p></div><span class="scrap-catalog-count">${scrapboardItems(true).length} items</span></div><div class="scrap-catalog-groups">${categories.map(category => {
+    return `<section class="scrap-catalog-manager"><details class="scrap-catalog-details" ${scrapboardCatalogExpanded ? 'open' : ''} ontoggle="rememberScrapboardCatalogExpanded(this.open)"><summary class="scrap-catalog-head"><div><div class="eyebrow">Catalog management</div><h2>Edit categories and items</h2><p>Rename, move, deactivate, or safely remove entries. Inactive entries stay in history but disappear from Buying and active rates.</p></div><span class="scrap-catalog-summary-action"><span class="scrap-catalog-count">${scrapboardItems(true).length} items</span><span class="scrap-catalog-toggle-label"><span class="when-closed">Expand catalog</span><span class="when-open">Minimize catalog</span><span class="scrap-catalog-chevron" aria-hidden="true">⌄</span></span></span></summary><div class="scrap-catalog-groups">${categories.map(category => {
         const items = scrapboardCategoryItems(category.key), categoryToken = catalogActionToken(category.key);
         return `<article class="scrap-catalog-group${category.active ? '' : ' is-inactive'}"><div class="scrap-catalog-group-head"><div><strong>${esc(category.label)}</strong>${category.active ? '' : '<span class="scrap-catalog-status">Inactive</span>'}<small>${items.length} item${items.length === 1 ? '' : 's'}</small></div><button class="btn secondary small" type="button" onclick="openScrapboardCategoryEditor('${categoryToken}')">Manage category</button></div><div class="scrap-catalog-items">${items.length ? items.map(item => `<div class="scrap-catalog-item"><div><strong>${esc(item.label)}</strong>${item.active ? '' : '<span class="scrap-catalog-status">Inactive</span>'}<small>${esc(item.unit)} · ${esc(item.key)}</small></div><button class="btn secondary small" type="button" onclick="openScrapboardItemEditor('${catalogActionToken(item.key)}')">Edit item</button></div>`).join('') : '<p class="scrap-catalog-empty">No items yet.</p>'}</div></article>`;
-    }).join('')}</div></section>`;
+    }).join('')}</div></details></section>`;
 }
 function scrapboardCategoryEditorMarkup(key) {
     const category = scrapboardCategoryEntry(key, true);
