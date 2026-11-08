@@ -120,6 +120,8 @@ function ensureShape() {
     db.pricing.scrapboardRates = db.pricing.scrapboardRates || {};
     db.pricing.customScrapboardCategories = Array.isArray(db.pricing.customScrapboardCategories) ? db.pricing.customScrapboardCategories : [];
     db.pricing.customScrapboardItems = Array.isArray(db.pricing.customScrapboardItems) ? db.pricing.customScrapboardItems : [];
+    db.pricing.scrapboardCategorySettings = db.pricing.scrapboardCategorySettings && typeof db.pricing.scrapboardCategorySettings === 'object' ? db.pricing.scrapboardCategorySettings : {};
+    db.pricing.scrapboardItemSettings = db.pricing.scrapboardItemSettings && typeof db.pricing.scrapboardItemSettings === 'object' ? db.pricing.scrapboardItemSettings : {};
     scrapboardItems().forEach(item => {
         const saved = Number(db.pricing.scrapboardRates[item.key]);
         if (!Number.isFinite(saved) || saved <= 0)
@@ -486,19 +488,50 @@ const SCRAPBOARD_ITEMS = [
     { key: 'NOKIA_ORIG_BUO', label: 'Nokia original buo', rate: 80, unit: 'pc', group: 'Whole units' }
 ];
 const SCRAPBOARD_BY_KEY = Object.fromEntries(SCRAPBOARD_ITEMS.map(item => [item.key, item]));
-function scrapboardItems() {
+function rawScrapboardItems() {
     const custom = Array.isArray(db.pricing?.customScrapboardItems) ? db.pricing.customScrapboardItems : [];
     return [...SCRAPBOARD_ITEMS, ...custom];
 }
-function scrapboardCategories() {
+function rawScrapboardCategories() {
     const builtIn = SCRAPBOARD_ITEMS.map(item => item.group);
     const custom = Array.isArray(db.pricing?.customScrapboardCategories) ? db.pricing.customScrapboardCategories : [];
     return [...new Set([...builtIn, ...custom].map(name => String(name || '').trim()).filter(Boolean))];
 }
 function normalizedCatalogName(value) { return String(value || '').trim().replace(/\s+/g, ' '); }
+function catalogOwnSetting(settings, key) {
+    return settings && typeof settings === 'object' && Object.prototype.hasOwnProperty.call(settings, key) && settings[key] && typeof settings[key] === 'object' ? settings[key] : {};
+}
+function scrapboardCategoryEntries(includeInactive = false) {
+    const settings = db.pricing?.scrapboardCategorySettings || {};
+    const custom = new Set((db.pricing?.customScrapboardCategories || []).map(value => String(value)));
+    return rawScrapboardCategories().map(key => {
+        const setting = catalogOwnSetting(settings, key);
+        return { key, label: normalizedCatalogName(setting.label) || key, active: setting.active !== false, custom: custom.has(key) };
+    }).filter(category => includeInactive || category.active);
+}
+function scrapboardCategoryEntry(value, includeInactive = true) {
+    const normalized = normalizedCatalogName(value).toLowerCase();
+    return scrapboardCategoryEntries(includeInactive).find(category => category.key.toLowerCase() === normalized || category.label.toLowerCase() === normalized) || null;
+}
+function scrapboardCategories(includeInactive = false) { return scrapboardCategoryEntries(includeInactive).map(category => category.label); }
+function scrapboardItems(includeInactive = false) {
+    const itemSettings = db.pricing?.scrapboardItemSettings || {};
+    return rawScrapboardItems().map(item => {
+        const setting = catalogOwnSetting(itemSettings, item.key);
+        const category = scrapboardCategoryEntry(setting.group || item.group, true) || scrapboardCategoryEntry(item.group, true);
+        const active = setting.active !== false && category?.active !== false;
+        const resolved = { ...item, label: normalizedCatalogName(setting.label) || item.label, unit: ['kg', 'pc'].includes(setting.unit) ? setting.unit : item.unit, group: category?.label || item.group };
+        return { ...resolved, active };
+    }).filter(item => includeInactive || item.active).map(item => {
+        if (includeInactive)
+            return item;
+        const { active, ...resolved } = item;
+        return resolved;
+    });
+}
 function customScrapboardKey(name) {
     const slug = normalizedCatalogName(name).toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 32) || 'ITEM';
-    const used = new Set(scrapboardItems().map(item => item.key));
+    const used = new Set(scrapboardItems(true).map(item => item.key));
     let key = '';
     do {
         key = `CUSTOM_${slug}_${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
@@ -522,13 +555,13 @@ async function addScrapboardItem(category, name, unit, rate) {
     if (!isAdmin())
         return false;
     const group = normalizedCatalogName(category), label = normalizedCatalogName(name), normalizedUnit = String(unit || '').toLowerCase(), numericRate = Number(rate);
-    const resolvedCategory = scrapboardCategories().find(value => value.toLowerCase() === group.toLowerCase());
+    const resolvedCategory = scrapboardCategoryEntry(group);
     if (!resolvedCategory || !label || !['kg', 'pc'].includes(normalizedUnit) || !Number.isInteger(numericRate) || numericRate <= 0)
         return false;
-    if (scrapboardItems().some(item => String(item.group).toLowerCase() === resolvedCategory.toLowerCase() && String(item.label).toLowerCase() === label.toLowerCase()))
+    if (scrapboardItems(true).some(item => String(item.group).toLowerCase() === resolvedCategory.label.toLowerCase() && String(item.label).toLowerCase() === label.toLowerCase()))
         return false;
     const beforeItems = [...(db.pricing.customScrapboardItems || [])], beforeRates = { ...(db.pricing.scrapboardRates || {}) };
-    const item = { key: customScrapboardKey(label), label, rate: numericRate, unit: normalizedUnit, group: resolvedCategory };
+    const item = { key: customScrapboardKey(label), label, rate: numericRate, unit: normalizedUnit, group: resolvedCategory.key };
     db.pricing.customScrapboardItems = [...beforeItems, item];
     db.pricing.scrapboardRates[item.key] = numericRate;
     if (await savePricingDB(false, 'catalog'))
@@ -536,6 +569,100 @@ async function addScrapboardItem(category, name, unit, rate) {
     db.pricing.customScrapboardItems = (db.pricing.customScrapboardItems || []).filter(value => value.key !== item.key);
     if (!db.pricing.customScrapboardItems.some(value => value.key === item.key))
         delete db.pricing.scrapboardRates[item.key];
+    return false;
+}
+function scrapboardCatalogReferenced(key) {
+    const visit = value => {
+        if (value === key)
+            return true;
+        if (Array.isArray(value))
+            return value.some(visit);
+        if (value && typeof value === 'object')
+            return Object.values(value).some(visit);
+        return false;
+    };
+    return Object.entries(db).some(([name, value]) => name !== 'pricing' && name !== 'pricingHistory' && visit(value));
+}
+function catalogPricingSnapshot() {
+    return JSON.parse(JSON.stringify({
+        customScrapboardCategories: db.pricing.customScrapboardCategories || [],
+        customScrapboardItems: db.pricing.customScrapboardItems || [],
+        scrapboardCategorySettings: db.pricing.scrapboardCategorySettings || {},
+        scrapboardItemSettings: db.pricing.scrapboardItemSettings || {},
+        scrapboardRates: db.pricing.scrapboardRates || {}
+    }));
+}
+function restoreCatalogPricing(snapshot) { Object.assign(db.pricing, snapshot); }
+async function editScrapboardCategory(key, changes) {
+    if (!isAdmin())
+        return false;
+    const category = scrapboardCategoryEntry(key, true), label = normalizedCatalogName(changes?.label);
+    if (!category || !label)
+        return false;
+    if (scrapboardCategoryEntries(true).some(entry => entry.key !== category.key && entry.label.toLowerCase() === label.toLowerCase()))
+        return false;
+    const before = catalogPricingSnapshot();
+    db.pricing.scrapboardCategorySettings = { ...(db.pricing.scrapboardCategorySettings || {}), [category.key]: { label, active: changes?.active !== false } };
+    if (await savePricingDB(false, 'catalog-management'))
+        return true;
+    restoreCatalogPricing(before);
+    return false;
+}
+async function editScrapboardItem(key, changes) {
+    if (!isAdmin())
+        return false;
+    const current = scrapboardItems(true).find(item => item.key === key), category = scrapboardCategoryEntry(changes?.group, true);
+    const label = normalizedCatalogName(changes?.label), unit = String(changes?.unit || '').toLowerCase();
+    if (!current || !category || !label || !['kg', 'pc'].includes(unit))
+        return false;
+    if (scrapboardItems(true).some(item => item.key !== key && item.group.toLowerCase() === category.label.toLowerCase() && item.label.toLowerCase() === label.toLowerCase()))
+        return false;
+    const before = catalogPricingSnapshot();
+    db.pricing.scrapboardItemSettings = { ...(db.pricing.scrapboardItemSettings || {}), [key]: { label, group: category.key, unit, active: changes?.active !== false } };
+    if (await savePricingDB(false, 'catalog-management'))
+        return true;
+    restoreCatalogPricing(before);
+    return false;
+}
+async function deleteScrapboardItem(key) {
+    if (!isAdmin())
+        return false;
+    const custom = (db.pricing.customScrapboardItems || []).find(item => item.key === key);
+    if (!custom || scrapboardCatalogReferenced(key))
+        return false;
+    const before = catalogPricingSnapshot();
+    db.pricing.customScrapboardItems = db.pricing.customScrapboardItems.filter(item => item.key !== key);
+    const settings = { ...(db.pricing.scrapboardItemSettings || {}) };
+    delete settings[key];
+    db.pricing.scrapboardItemSettings = settings;
+    const rates = { ...(db.pricing.scrapboardRates || {}) };
+    delete rates[key];
+    db.pricing.scrapboardRates = rates;
+    if (await savePricingDB(false, 'catalog-management'))
+        return true;
+    restoreCatalogPricing(before);
+    return false;
+}
+async function deleteScrapboardCategory(key) {
+    if (!isAdmin())
+        return false;
+    const category = scrapboardCategoryEntry(key, true);
+    if (!category?.custom)
+        return false;
+    const hasItems = rawScrapboardItems().some(item => {
+        const setting = catalogOwnSetting(db.pricing.scrapboardItemSettings || {}, item.key);
+        return (scrapboardCategoryEntry(setting.group || item.group, true)?.key || item.group) === category.key;
+    });
+    if (hasItems)
+        return false;
+    const before = catalogPricingSnapshot();
+    db.pricing.customScrapboardCategories = db.pricing.customScrapboardCategories.filter(value => value !== category.key);
+    const settings = { ...(db.pricing.scrapboardCategorySettings || {}) };
+    delete settings[category.key];
+    db.pricing.scrapboardCategorySettings = settings;
+    if (await savePricingDB(false, 'catalog-management'))
+        return true;
+    restoreCatalogPricing(before);
     return false;
 }
 const GRADE_META = { Gold: GOLD_GRADES, Silver: SILVER_GRADES, Platinum: PLATINUM_GRADES };
@@ -618,7 +745,7 @@ function customPurityGradeKey(value) {
 }
 function gradeLabel(metal, key) {
     if (metal === 'Scrapboard')
-        return scrapboardItems().find(item => item.key === key)?.label || key;
+        return scrapboardItems(true).find(item => item.key === key)?.label || key;
     const g = gradeMeta(metal, key);
     if (g)
         return g.label;
@@ -7093,7 +7220,13 @@ function renderReports() {
 }
 /* ============================= INIT ============================= */
 /* ============================= SCRAPBOARD BUYING EXPERIENCE ============================= */
-function scrapboardItem(key) { return scrapboardItems().find(item => item.key === key) || SCRAPBOARD_ITEMS[0]; }
+function scrapboardItem(key) {
+    const resolved = scrapboardItems(true).find(item => item.key === key);
+    if (!resolved)
+        return SCRAPBOARD_ITEMS[0];
+    const { active, ...item } = resolved;
+    return item;
+}
 function purchaseQuantityLabel(item) {
     const fallbackQuantity = item.unit === 'kg' ? Number(item.netWeight || 0) / 1000 : Number(item.netWeight || 0);
     const quantity = Number(item.purchaseQuantity ?? fallbackQuantity);

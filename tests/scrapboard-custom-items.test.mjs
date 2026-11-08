@@ -16,7 +16,11 @@ async function loadCustomItemApi() {
       available: () => ({
         catalog: typeof scrapboardItems === 'function',
         addCategory: typeof addScrapboardCategory === 'function',
-        addItem: typeof addScrapboardItem === 'function'
+        addItem: typeof addScrapboardItem === 'function',
+        editCategory: typeof editScrapboardCategory === 'function',
+        editItem: typeof editScrapboardItem === 'function',
+        deleteCategory: typeof deleteScrapboardCategory === 'function',
+        deleteItem: typeof deleteScrapboardItem === 'function'
       }),
       setAdmin: () => { currentUser = { id: 'admin', role: 'admin', displayName: 'Administrator' }; },
       setStaff: () => { currentUser = { id: 'staff', role: 'staff', displayName: 'Staff' }; },
@@ -25,7 +29,8 @@ async function loadCustomItemApi() {
       saveCalls: () => customSaveCalls,
       categories: () => Array.from(db.pricing.customScrapboardCategories || []),
       customItems: () => Array.from(db.pricing.customScrapboardItems || [], item => ({ ...item })),
-      catalog: () => Array.from(scrapboardItems(), item => ({ ...item })),
+      catalog: (includeInactive = false) => Array.from(scrapboardItems(includeInactive), item => ({ ...item })),
+      categoryEntries: (includeInactive = false) => Array.from(scrapboardCategoryEntries(includeInactive), category => ({ ...category })),
       renderRates: () => renderRates(),
       renderBuying: () => renderBuying(),
       lookup: key => ({ ...scrapboardItem(key) }),
@@ -34,14 +39,104 @@ async function loadCustomItemApi() {
       exportRowsAvailable: () => typeof scrapboardRateExportRows === 'function',
       exportRows: () => Array.from(scrapboardRateExportRows(), row => ({ ...row })),
       addCategory: value => addScrapboardCategory(value),
-      addItem: (category, name, unit, rate) => addScrapboardItem(category, name, unit, rate)
+      addItem: (category, name, unit, rate) => addScrapboardItem(category, name, unit, rate),
+      editCategory: (key, changes) => editScrapboardCategory(key, changes),
+      editItem: (key, changes) => editScrapboardItem(key, changes),
+      deleteCategory: key => deleteScrapboardCategory(key),
+      deleteItem: key => deleteScrapboardItem(key),
+      referenceItem: key => { db.stock.push({ id: 'stock-reference', metal: 'Scrapboard', karat: key }); }
     };`, context);
   return context.customItemApi;
 }
 
-test('custom scrapboard catalog interfaces are available', async () => {
+test('custom scrapboard catalog and management interfaces are available', async () => {
   const api = await loadCustomItemApi();
-  assert.deepEqual({ ...api.available() }, { catalog: true, addCategory: true, addItem: true });
+  assert.deepEqual({ ...api.available() }, {
+    catalog: true, addCategory: true, addItem: true,
+    editCategory: true, editItem: true, deleteCategory: true, deleteItem: true
+  });
+});
+
+test('admin can rename and deactivate a built-in category without losing historical item labels', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+
+  assert.equal(await api.editCategory('IC chips · A series', { label: 'A-Series IC', active: true }), true);
+  assert.equal(api.catalog().find(item => item.key === 'A6').group, 'A-Series IC');
+  assert.equal(await api.editCategory('IC chips · A series', { label: 'A-Series IC', active: false }), true);
+  assert.equal(api.catalog().some(item => item.key === 'A6'), false);
+  assert.equal(api.catalog(true).find(item => item.key === 'A6').label, 'A6');
+  assert.equal(api.label('A6'), 'A6');
+});
+
+test('admin can override a built-in item label category unit and active state', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+
+  assert.equal(await api.editItem('A6', { label: 'Premium A6', group: 'Whole boards', unit: 'pc', active: false }), true);
+  const item = api.catalog(true).find(entry => entry.key === 'A6');
+  assert.deepEqual(
+    { label: item.label, group: item.group, unit: item.unit, active: item.active },
+    { label: 'Premium A6', group: 'Whole boards', unit: 'pc', active: false }
+  );
+  assert.equal(api.catalog().some(entry => entry.key === 'A6'), false);
+  assert.equal(api.label('A6'), 'Premium A6');
+});
+
+test('catalog management rejects duplicate normalized category and item labels', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+
+  assert.equal(await api.editCategory('Whole boards', { label: ' IC chips · A series ', active: true }), false);
+  assert.equal(await api.editItem('A6', { label: ' A5 ', group: 'IC chips · A series', unit: 'kg', active: true }), false);
+});
+
+test('only unused custom entries can be permanently deleted', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  await api.addCategory('Temporary Parts');
+  await api.addItem('Temporary Parts', 'Temporary Chip', 'pc', 20);
+  const key = api.customItems()[0].key;
+
+  assert.equal(await api.deleteCategory('Temporary Parts'), false);
+  api.referenceItem(key);
+  assert.equal(await api.deleteItem(key), false);
+  assert.equal(await api.editItem(key, { label: 'Temporary Chip', group: 'Temporary Parts', unit: 'pc', active: false }), true);
+  assert.equal(api.catalog().some(item => item.key === key), false);
+});
+
+test('unused custom item and then its empty category can be permanently deleted', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  await api.addCategory('Disposable Parts');
+  await api.addItem('Disposable Parts', 'Disposable Chip', 'pc', 20);
+  const key = api.customItems()[0].key;
+
+  assert.equal(await api.deleteItem(key), true);
+  assert.equal(await api.deleteCategory('Disposable Parts'), true);
+  assert.equal(api.catalog(true).some(item => item.key === key), false);
+  assert.equal(api.categoryEntries(true).some(category => category.key === 'Disposable Parts'), false);
+});
+
+test('staff cannot edit deactivate or delete catalog definitions', async () => {
+  const api = await loadCustomItemApi();
+  api.setStaff();
+
+  assert.equal(await api.editCategory('Whole boards', { label: 'Changed', active: false }), false);
+  assert.equal(await api.editItem('A6', { label: 'Changed', group: 'Whole boards', unit: 'kg', active: false }), false);
+  assert.equal(await api.deleteCategory('Whole boards'), false);
+  assert.equal(await api.deleteItem('A6'), false);
+  assert.equal(api.saveCalls(), 0);
+});
+
+test('failed catalog-management save rolls back a built-in item edit', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  api.setSaveResult(false);
+
+  assert.equal(await api.editItem('A6', { label: 'Unsaved A6', group: 'Whole boards', unit: 'pc', active: false }), false);
+  const item = api.catalog(true).find(entry => entry.key === 'A6');
+  assert.deepEqual({ label: item.label, group: item.group, unit: item.unit, active: item.active }, { label: 'A6', group: 'IC chips · A series', unit: 'kg', active: true });
 });
 
 test('admin can add a persistent category and item to the combined catalog', async () => {

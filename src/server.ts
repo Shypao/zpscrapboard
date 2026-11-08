@@ -113,8 +113,25 @@ function pricingCustomItems(pricing: PricingSettings | null): Array<Record<strin
   return Array.isArray(values)?values.filter(value=>value&&typeof value==='object').map(value=>({...value})):[];
 }
 
-export function isolatedPricingUpdate(current: PricingSettings | null, candidate: PricingSettings, scope: 'internal' | 'public' | 'catalog'): PricingSettings {
+function pricingCatalogSettings(pricing: PricingSettings | null, key: 'scrapboardCategorySettings' | 'scrapboardItemSettings'): Record<string, Record<string, any>> {
+  const value=(pricing as Record<string,any> | null)?.[key];
+  if(!value||typeof value!=='object'||Array.isArray(value))return {};
+  return Object.fromEntries(Object.entries(value).filter(([,setting])=>setting&&typeof setting==='object'&&!Array.isArray(setting)).map(([name,setting])=>[name,{...(setting as Record<string,any>)}]));
+}
+
+export function isolatedPricingUpdate(current: PricingSettings | null, candidate: PricingSettings, scope: 'internal' | 'public' | 'catalog' | 'catalog-management'): PricingSettings {
   if (scope === 'public') return { ...current, publicDailyRates: candidate.publicDailyRates };
+  if(scope==='catalog-management'&&current){
+    const currentRecord=JSON.parse(JSON.stringify(current)) as Record<string,any>;
+    const candidateRecord=JSON.parse(JSON.stringify(candidate)) as Record<string,any>;
+    return {...currentRecord,
+      customScrapboardCategories:pricingCustomCategories(candidate),
+      customScrapboardItems:pricingCustomItems(candidate),
+      scrapboardCategorySettings:pricingCatalogSettings(candidate,'scrapboardCategorySettings'),
+      scrapboardItemSettings:pricingCatalogSettings(candidate,'scrapboardItemSettings'),
+      scrapboardRates:{...(candidateRecord.scrapboardRates??{})}
+    };
+  }
   if (scope === 'catalog' && current) {
     const currentRecord=JSON.parse(JSON.stringify(current)) as Record<string,any>;
     const candidateRecord=JSON.parse(JSON.stringify(candidate)) as Record<string,any>;
@@ -138,6 +155,8 @@ export function isolatedPricingUpdate(current: PricingSettings | null, candidate
     const currentRecord=current as Record<string,any>,candidateRecord=candidate as Record<string,any>;
     next.customScrapboardCategories=pricingCustomCategories(current);
     next.customScrapboardItems=pricingCustomItems(current);
+    next.scrapboardCategorySettings=pricingCatalogSettings(current,'scrapboardCategorySettings');
+    next.scrapboardItemSettings=pricingCatalogSettings(current,'scrapboardItemSettings');
     const candidateKeys=new Set(pricingCustomItems(candidate).map(item=>String(item.key)));
     const nextRates={...(candidateRecord.scrapboardRates??{})};
     for(const item of pricingCustomItems(current)){
@@ -1127,13 +1146,13 @@ export async function requestHandler(request: IncomingMessage, response: ServerR
       if (user!.role !== 'admin' && pricingHistory !== undefined) return sendJson(response, 403, { error: 'Only administrators can save rate-sheet history' });
       const current = await loadState();
       const scope = body.scope ?? 'internal';
-      if (scope !== 'internal' && scope !== 'public' && scope !== 'catalog') return sendJson(response, 400, { error: 'Invalid pricing scope' });
+      if (scope !== 'internal' && scope !== 'public' && scope !== 'catalog' && scope !== 'catalog-management') return sendJson(response, 400, { error: 'Invalid pricing scope' });
       if (scope === 'public') {
         if (user!.role !== 'admin') return sendJson(response, 403, { error: 'Only administrators can edit public daily rates' });
         if (!validatePublicDailyRates((pricing as PricingSettings).publicDailyRates)) return sendJson(response, 400, { error: 'Invalid public daily rates' });
         if (pricingHistory !== undefined) return sendJson(response, 400, { error: 'Public rates cannot change internal rate history' });
       }
-      if(scope==='catalog'&&user!.role!=='admin')return sendJson(response,403,{error:'Only administrators can add categories or items'});
+      if((scope==='catalog'||scope==='catalog-management')&&user!.role!=='admin')return sendJson(response,403,{error:'Only administrators can manage categories or items'});
       const expectedRevision=Number(body.revision);
       assertPricingRevision(expectedRevision,Number(current._revision||0));
       const candidatePricing = isolatedPricingUpdate(current.pricing, pricing as PricingSettings, scope);

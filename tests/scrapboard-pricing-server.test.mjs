@@ -49,6 +49,26 @@ test('catalog scope merges additions without deleting current definitions', () =
   assert.equal(result.scrapboardRates.CUSTOM_SECOND, 50);
 });
 
+test('catalog-management scope applies authoritative edits and deletions without changing unrelated pricing', () => {
+  const candidate = structuredClone(currentPricing);
+  candidate.customScrapboardCategories = [];
+  candidate.customScrapboardItems = [];
+  candidate.scrapboardRates = { A6: 1500 };
+  candidate.scrapboardCategorySettings = { 'Whole boards': { label: 'Main boards', active: true } };
+  candidate.scrapboardItemSettings = { A6: { label: 'Premium A6', group: 'Whole boards', unit: 'pc', active: false } };
+  const result = serverPricingProbe(`
+    const result = server.isolatedPricingUpdate(${JSON.stringify(currentPricing)}, ${JSON.stringify(candidate)}, 'catalog-management');
+    process.stdout.write(JSON.stringify(result));
+  `);
+  assert.deepEqual(result.customScrapboardCategories, []);
+  assert.deepEqual(result.customScrapboardItems, []);
+  assert.deepEqual(result.scrapboardCategorySettings, candidate.scrapboardCategorySettings);
+  assert.deepEqual(result.scrapboardItemSettings, candidate.scrapboardItemSettings);
+  assert.equal(result.scrapboardRates.CUSTOM_NEW, undefined);
+  assert.equal(result.scrapboardRates.A6, 1500);
+  assert.deepEqual(result.gold, currentPricing.gold);
+});
+
 test('staff rate validation accepts persisted custom item keys without catalog changes', () => {
   const candidate = structuredClone(currentPricing);
   candidate.scrapboardRates.CUSTOM_NEW = 30;
