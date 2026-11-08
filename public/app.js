@@ -205,7 +205,7 @@ async function savePricingDB(includeHistory = false, scope = 'internal') {
         return saveDB();
     try {
         ensureShape();
-        const body = { pricing: db.pricing, scope };
+        const body = { pricing: db.pricing, scope, revision: db._revision };
         if (includeHistory)
             body.pricingHistory = db.pricingHistory;
         const response = await fetch('/api/pricing', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -513,9 +513,9 @@ async function addScrapboardCategory(name) {
         return false;
     const before = [...(db.pricing.customScrapboardCategories || [])];
     db.pricing.customScrapboardCategories = [...before, category];
-    if (await savePricingDB())
+    if (await savePricingDB(false, 'catalog'))
         return true;
-    db.pricing.customScrapboardCategories = before;
+    db.pricing.customScrapboardCategories = (db.pricing.customScrapboardCategories || []).filter(value => value !== category);
     return false;
 }
 async function addScrapboardItem(category, name, unit, rate) {
@@ -523,7 +523,7 @@ async function addScrapboardItem(category, name, unit, rate) {
         return false;
     const group = normalizedCatalogName(category), label = normalizedCatalogName(name), normalizedUnit = String(unit || '').toLowerCase(), numericRate = Number(rate);
     const resolvedCategory = scrapboardCategories().find(value => value.toLowerCase() === group.toLowerCase());
-    if (!resolvedCategory || !label || !['kg', 'pc'].includes(normalizedUnit) || !Number.isFinite(numericRate) || numericRate <= 0)
+    if (!resolvedCategory || !label || !['kg', 'pc'].includes(normalizedUnit) || !Number.isInteger(numericRate) || numericRate <= 0)
         return false;
     if (scrapboardItems().some(item => String(item.group).toLowerCase() === resolvedCategory.toLowerCase() && String(item.label).toLowerCase() === label.toLowerCase()))
         return false;
@@ -531,10 +531,11 @@ async function addScrapboardItem(category, name, unit, rate) {
     const item = { key: customScrapboardKey(label), label, rate: numericRate, unit: normalizedUnit, group: resolvedCategory };
     db.pricing.customScrapboardItems = [...beforeItems, item];
     db.pricing.scrapboardRates[item.key] = numericRate;
-    if (await savePricingDB())
+    if (await savePricingDB(false, 'catalog'))
         return true;
-    db.pricing.customScrapboardItems = beforeItems;
-    db.pricing.scrapboardRates = beforeRates;
+    db.pricing.customScrapboardItems = (db.pricing.customScrapboardItems || []).filter(value => value.key !== item.key);
+    if (!db.pricing.customScrapboardItems.some(value => value.key === item.key))
+        delete db.pricing.scrapboardRates[item.key];
     return false;
 }
 const GRADE_META = { Gold: GOLD_GRADES, Silver: SILVER_GRADES, Platinum: PLATINUM_GRADES };
@@ -1267,12 +1268,13 @@ function renderStaffRates() {
   </section>`;
 }
 function scrapboardRateGroups() {
+    const initial = Object.fromEntries(scrapboardCategories().map(category => [category, []]));
     return scrapboardItems().reduce((groups, item) => {
         if (!groups[item.group])
             groups[item.group] = [];
         groups[item.group].push(item);
         return groups;
-    }, {});
+    }, initial);
 }
 function renderRates() {
     const editable = canEditDailyRates();
@@ -1338,8 +1340,8 @@ async function submitScrapboardItem() {
         document.getElementById('quick_add_item_name')?.focus();
         return;
     }
-    if (!Number.isFinite(rate) || rate <= 0) {
-        toast('Enter a valid starting rate');
+    if (!Number.isInteger(rate) || rate <= 0) {
+        toast('Enter a whole-peso starting rate');
         document.getElementById('quick_add_item_rate')?.focus();
         return;
     }

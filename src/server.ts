@@ -103,9 +103,49 @@ export function publicPricingPayload(pricing: PricingSettings | null): { effecti
   return { effectiveDate: sheet.effectiveDate, unit: 'PHP per gram', rates };
 }
 
-function isolatedPricingUpdate(current: PricingSettings | null, candidate: PricingSettings, scope: 'internal' | 'public'): PricingSettings {
+function pricingCustomCategories(pricing: PricingSettings | null): string[] {
+  const values=(pricing as Record<string, any> | null)?.customScrapboardCategories;
+  return Array.isArray(values)?values.map(value=>String(value||'').trim()).filter(Boolean):[];
+}
+
+function pricingCustomItems(pricing: PricingSettings | null): Array<Record<string, any>> {
+  const values=(pricing as Record<string, any> | null)?.customScrapboardItems;
+  return Array.isArray(values)?values.filter(value=>value&&typeof value==='object').map(value=>({...value})):[];
+}
+
+export function isolatedPricingUpdate(current: PricingSettings | null, candidate: PricingSettings, scope: 'internal' | 'public' | 'catalog'): PricingSettings {
   if (scope === 'public') return { ...current, publicDailyRates: candidate.publicDailyRates };
+  if (scope === 'catalog' && current) {
+    const currentRecord=JSON.parse(JSON.stringify(current)) as Record<string,any>;
+    const candidateRecord=JSON.parse(JSON.stringify(candidate)) as Record<string,any>;
+    const categories=pricingCustomCategories(current);
+    for(const category of pricingCustomCategories(candidate)){
+      if(!categories.some(value=>value.toLowerCase()===category.toLowerCase()))categories.push(category);
+    }
+    const items=pricingCustomItems(current),knownKeys=new Set(items.map(item=>String(item.key)));
+    const rates={...(currentRecord.scrapboardRates??{})};
+    for(const item of pricingCustomItems(candidate)){
+      const key=String(item.key||'');
+      if(!key||knownKeys.has(key))continue;
+      items.push(item);knownKeys.add(key);
+      const rate=Number(candidateRecord.scrapboardRates?.[key]??item.rate);
+      if(Number.isInteger(rate)&&rate>0)rates[key]=rate;
+    }
+    return {...currentRecord,customScrapboardCategories:categories,customScrapboardItems:items,scrapboardRates:rates};
+  }
   const next = { ...candidate };
+  if(current){
+    const currentRecord=current as Record<string,any>,candidateRecord=candidate as Record<string,any>;
+    next.customScrapboardCategories=pricingCustomCategories(current);
+    next.customScrapboardItems=pricingCustomItems(current);
+    const candidateKeys=new Set(pricingCustomItems(candidate).map(item=>String(item.key)));
+    const nextRates={...(candidateRecord.scrapboardRates??{})};
+    for(const item of pricingCustomItems(current)){
+      const key=String(item.key||'');
+      if(key&&!candidateKeys.has(key))nextRates[key]=currentRecord.scrapboardRates?.[key]??item.rate;
+    }
+    next.scrapboardRates=nextRates;
+  }
   if (current && Object.prototype.hasOwnProperty.call(current, 'publicDailyRates')) next.publicDailyRates = current.publicDailyRates;
   else delete next.publicDailyRates;
   return next;
@@ -671,6 +711,9 @@ async function cashflowSnapshot(date: string) {
 }
 
 class LedgerRevisionConflict extends Error {}
+export function assertPricingRevision(expected: number, current: number): void {
+  if(!Number.isInteger(expected)||expected!==current)throw new LedgerRevisionConflict('The ledger changed in another session. Refresh and try again.');
+}
 
 async function currentLedgerRevision(): Promise<number> {
   const row = await dbGet<{ value: string }>("SELECT value FROM settings WHERE key = 'ledger_revision'");
@@ -848,34 +891,38 @@ async function saveState(state: LedgerState): Promise<void> {
   state._revision=nextRevision;
 }
 
-async function savePricingState(pricing: PricingSettings, pricingHistory?: LedgerRecord[]): Promise<number> {
-  const nextRevision=(await currentLedgerRevision())+1;
+async function savePricingState(pricing: PricingSettings, pricingHistory?: LedgerRecord[], expectedRevision?: number): Promise<number> {
+  const currentRevision=await currentLedgerRevision();
+  const guardedRevision=expectedRevision??currentRevision;
+  assertPricingRevision(guardedRevision,currentRevision);
+  const nextRevision=currentRevision+1;
   const statements: SqlStatement[] = [];
   if (pricingHistory) {
-    statements.push({ sql: 'DELETE FROM pricing_history' });
+    statements.push({ sql: "DELETE FROM pricing_history WHERE (SELECT CAST(value AS INTEGER) FROM settings WHERE key='ledger_revision') = ?", args:[guardedRevision] });
     for (const record of pricingHistory) {
       if (!record.id) throw new Error('Pricing history contains a record without an id');
       statements.push({
-        sql: 'INSERT INTO pricing_history (id, data) VALUES (?, ?)',
-        args: [record.id, JSON.stringify(record)]
+        sql: "INSERT INTO pricing_history (id, data) SELECT ?, ? WHERE (SELECT CAST(value AS INTEGER) FROM settings WHERE key='ledger_revision') = ?",
+        args: [record.id, JSON.stringify(record),guardedRevision]
       });
     }
   }
   statements.push(
     {
-      sql: "INSERT INTO settings (key, value) VALUES ('pricing', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-      args: [JSON.stringify(pricing)]
+      sql: "INSERT INTO settings (key, value) SELECT 'pricing', ? WHERE (SELECT CAST(value AS INTEGER) FROM settings WHERE key='ledger_revision') = ? ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+      args: [JSON.stringify(pricing),guardedRevision]
     },
     {
-      sql: "INSERT INTO settings (key, value) VALUES ('ledger_revision', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-      args: [String(nextRevision)]
+      sql: "UPDATE settings SET value = ? WHERE key = 'ledger_revision' AND CAST(value AS INTEGER) = ?",
+      args: [String(nextRevision),guardedRevision]
     }
   );
-  await dbBatch(statements);
+  const changes=await dbBatch(statements);
+  if(changes.at(-1)!==1)throw new LedgerRevisionConflict('The ledger changed in another session. Refresh and try again.');
   return nextRevision;
 }
 
-function staffEditablePricing(currentPricing: PricingSettings, candidatePricing: PricingSettings): PricingSettings {
+export function staffEditablePricing(currentPricing: PricingSettings, candidatePricing: PricingSettings): PricingSettings {
   const current = JSON.parse(JSON.stringify(currentPricing)) as Record<string, any>;
   const candidate = JSON.parse(JSON.stringify(candidatePricing)) as Record<string, any>;
   if (current.staffRateEditingUnlocked !== true) throw new Error('Daily buying rates are locked by an administrator');
@@ -884,8 +931,9 @@ function staffEditablePricing(currentPricing: PricingSettings, candidatePricing:
   const candidateFormula = candidate.dailyFormula ?? { effectiveDate: '', baseRates: {} };
   const candidateBaseRates = candidateFormula.baseRates ?? {};
   const candidateScrapboardRates = candidate.scrapboardRates ?? {};
-  if (Object.keys(candidateScrapboardRates).length !== Object.keys(DEFAULT_SCRAPBOARD_RATES).length ||
-      Object.entries(candidateScrapboardRates).some(([key,value]) => !(key in DEFAULT_SCRAPBOARD_RATES) || !Number.isFinite(Number(value)) || Number(value) <= 0)) {
+  const permittedScrapboardRates=new Set(Object.keys(current.scrapboardRates??{}));
+  if (Object.keys(candidateScrapboardRates).length !== permittedScrapboardRates.size ||
+      Object.entries(candidateScrapboardRates).some(([key,value]) => !permittedScrapboardRates.has(key) || !Number.isFinite(Number(value)) || Number(value) <= 0)) {
     throw new Error('Invalid scrapboard daily buying rate');
   }
   if (typeof candidateFormula.effectiveDate !== 'string' || !candidateFormula.effectiveDate ||
@@ -1079,17 +1127,20 @@ export async function requestHandler(request: IncomingMessage, response: ServerR
       if (user!.role !== 'admin' && pricingHistory !== undefined) return sendJson(response, 403, { error: 'Only administrators can save rate-sheet history' });
       const current = await loadState();
       const scope = body.scope ?? 'internal';
-      if (scope !== 'internal' && scope !== 'public') return sendJson(response, 400, { error: 'Invalid pricing scope' });
+      if (scope !== 'internal' && scope !== 'public' && scope !== 'catalog') return sendJson(response, 400, { error: 'Invalid pricing scope' });
       if (scope === 'public') {
         if (user!.role !== 'admin') return sendJson(response, 403, { error: 'Only administrators can edit public daily rates' });
         if (!validatePublicDailyRates((pricing as PricingSettings).publicDailyRates)) return sendJson(response, 400, { error: 'Invalid public daily rates' });
         if (pricingHistory !== undefined) return sendJson(response, 400, { error: 'Public rates cannot change internal rate history' });
       }
+      if(scope==='catalog'&&user!.role!=='admin')return sendJson(response,403,{error:'Only administrators can add categories or items'});
+      const expectedRevision=Number(body.revision);
+      assertPricingRevision(expectedRevision,Number(current._revision||0));
       const candidatePricing = isolatedPricingUpdate(current.pricing, pricing as PricingSettings, scope);
       const nextPricing = user!.role === 'admin'
         ? candidatePricing
         : staffEditablePricing(current.pricing as PricingSettings, candidatePricing);
-      const revision = await savePricingState(nextPricing, user!.role === 'admin' ? pricingHistory as LedgerRecord[] | undefined : undefined);
+      const revision = await savePricingState(nextPricing, user!.role === 'admin' ? pricingHistory as LedgerRecord[] | undefined : undefined,expectedRevision);
       return sendJson(response, 200, { ok: true, revision });
     }
     if (request.method === 'GET' && url.pathname === '/api/buying-draft') {
@@ -1226,6 +1277,7 @@ export async function requestHandler(request: IncomingMessage, response: ServerR
     return sendJson(response, 404, { error: 'Not found' });
   } catch (error) {
     console.error(error);
+    if(error instanceof LedgerRevisionConflict)return sendJson(response,409,{error:error.message});
     return sendJson(response, 500, { error: error instanceof Error ? error.message : 'Server error' });
   }
 }

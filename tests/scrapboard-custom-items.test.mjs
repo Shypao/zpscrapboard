@@ -10,7 +10,8 @@ async function loadCustomItemApi() {
     seedEmptyLedger(); ensureShape();
     let customSaveResult = true;
     let customSaveCalls = 0;
-    savePricingDB = async () => { customSaveCalls += 1; return customSaveResult; };
+    const customSaveQueue = [];
+    savePricingDB = async () => { customSaveCalls += 1; return customSaveQueue.length ? customSaveQueue.shift().promise : customSaveResult; };
     globalThis.customItemApi = {
       available: () => ({
         catalog: typeof scrapboardItems === 'function',
@@ -20,6 +21,7 @@ async function loadCustomItemApi() {
       setAdmin: () => { currentUser = { id: 'admin', role: 'admin', displayName: 'Administrator' }; },
       setStaff: () => { currentUser = { id: 'staff', role: 'staff', displayName: 'Staff' }; },
       setSaveResult: value => { customSaveResult = value; },
+      queueSave: () => { let resolve; const promise = new Promise(done => { resolve = done; }); customSaveQueue.push({ promise }); return resolve; },
       saveCalls: () => customSaveCalls,
       categories: () => Array.from(db.pricing.customScrapboardCategories || []),
       customItems: () => Array.from(db.pricing.customScrapboardItems || [], item => ({ ...item })),
@@ -121,13 +123,14 @@ test('new custom item renders as a Daily Rates card in its category', async () =
   assert.match(html, /value="12"/);
 });
 
-test('site palette uses grey white and light green low-contrast colors', async () => {
+test('site palette matches the original cream charcoal and brass software style', async () => {
   const source = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
-  assert.match(source, /--paper:#f7f8f7/);
-  assert.match(source, /--paper-2:#f1f4f2/);
-  assert.match(source, /--brass:#9ab8a5/);
-  assert.match(source, /--brass-bright:#c9ddcf/);
-  assert.match(source, /--ink:#34413d/);
+  const finalRoot = [...source.matchAll(/:root\{([^}]*)\}/g)].at(-1)?.[1] || '';
+  assert.match(finalRoot, /--paper:#F6F1E4/);
+  assert.match(finalRoot, /--paper-2:#EEE6D2/);
+  assert.match(finalRoot, /--brass:#A9791E/);
+  assert.match(finalRoot, /--brass-bright:#C9911F/);
+  assert.match(finalRoot, /--ink:#1C1B19/);
 });
 
 test('custom item appears under its category on the Buying page', async () => {
@@ -153,4 +156,43 @@ test('daily-rate export rows include custom items', async () => {
 
   assert.equal(api.exportRowsAvailable(), true);
   assert.equal(api.exportRows().some(row => row.category === 'Special Boards' && row.classification === 'Router Board' && row.unit === 'kg' && row.rate === 240), true);
+});
+
+test('reserved object-property category names render safely', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  await api.addCategory('constructor');
+  await api.addItem('constructor', 'Safe Chip', 'pc', 25);
+  assert.doesNotThrow(() => api.renderRates());
+  assert.doesNotThrow(() => api.renderBuying());
+  assert.match(api.renderRates(), /<h3>constructor<\/h3>/);
+});
+
+test('empty custom category appears in Daily Rates before it has items', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  await api.addCategory('Future Items');
+  assert.match(api.renderRates(), /<h3>Future Items<\/h3>/);
+});
+
+test('whole-peso catalog rejects fractional starting rates', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  await api.addCategory('Fraction Check');
+  assert.equal(await api.addItem('Fraction Check', 'Fractional Chip', 'pc', 0.1), false);
+  assert.equal(api.customItems().length, 0);
+});
+
+test('failed overlapping save rolls back only its own category', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  const resolveFirst = api.queueSave();
+  const resolveSecond = api.queueSave();
+  const first = api.addCategory('First Pending');
+  const second = api.addCategory('Second Saved');
+  resolveSecond(true);
+  assert.equal(await second, true);
+  resolveFirst(false);
+  assert.equal(await first, false);
+  assert.deepEqual([...api.categories()], ['Second Saved']);
 });
