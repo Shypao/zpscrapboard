@@ -102,6 +102,8 @@ function ensureShape(){
   db.pricing.scrapboardRates=db.pricing.scrapboardRates||{};
   db.pricing.customScrapboardCategories=Array.isArray(db.pricing.customScrapboardCategories)?db.pricing.customScrapboardCategories:[];
   db.pricing.customScrapboardItems=Array.isArray(db.pricing.customScrapboardItems)?db.pricing.customScrapboardItems:[];
+  db.pricing.scrapboardCategorySettings=db.pricing.scrapboardCategorySettings&&typeof db.pricing.scrapboardCategorySettings==='object'?db.pricing.scrapboardCategorySettings:{};
+  db.pricing.scrapboardItemSettings=db.pricing.scrapboardItemSettings&&typeof db.pricing.scrapboardItemSettings==='object'?db.pricing.scrapboardItemSettings:{};
   scrapboardItems().forEach(item=>{
     const saved=Number(db.pricing.scrapboardRates[item.key]);
     if(!Number.isFinite(saved)||saved<=0) db.pricing.scrapboardRates[item.key]=item.rate;
@@ -377,48 +379,159 @@ const SCRAPBOARD_ITEMS = [
   {key:'NOKIA_ORIG_BUO',label:'Nokia original buo',rate:80,unit:'pc',group:'Whole units'}
 ];
 const SCRAPBOARD_BY_KEY = Object.fromEntries(SCRAPBOARD_ITEMS.map(item=>[item.key,item]));
-function scrapboardItems(){
+function rawScrapboardItems(){
   const custom=Array.isArray(db.pricing?.customScrapboardItems)?db.pricing.customScrapboardItems:[];
   return [...SCRAPBOARD_ITEMS,...custom];
 }
-function scrapboardCategories(){
+function rawScrapboardCategories(){
   const builtIn=SCRAPBOARD_ITEMS.map(item=>item.group);
   const custom=Array.isArray(db.pricing?.customScrapboardCategories)?db.pricing.customScrapboardCategories:[];
   return [...new Set([...builtIn,...custom].map(name=>String(name||'').trim()).filter(Boolean))];
 }
 function normalizedCatalogName(value){ return String(value||'').trim().replace(/\s+/g,' '); }
+function catalogOwnSetting(settings,key){
+  return settings&&typeof settings==='object'&&Object.prototype.hasOwnProperty.call(settings,key)&&settings[key]&&typeof settings[key]==='object'?settings[key]:{};
+}
+function scrapboardCategoryEntries(includeInactive=false){
+  const settings=db.pricing?.scrapboardCategorySettings||{};
+  const custom=new Set((db.pricing?.customScrapboardCategories||[]).map(value=>String(value)));
+  return rawScrapboardCategories().map(key=>{
+    const setting=catalogOwnSetting(settings,key);
+    return {key,label:normalizedCatalogName(setting.label)||key,active:setting.active!==false,custom:custom.has(key)};
+  }).filter(category=>includeInactive||category.active);
+}
+function scrapboardCategoryEntry(value,includeInactive=true){
+  const normalized=normalizedCatalogName(value).toLowerCase();
+  const entries=scrapboardCategoryEntries(includeInactive);
+  return entries.find(category=>category.key.toLowerCase()===normalized)||entries.find(category=>category.label.toLowerCase()===normalized)||null;
+}
+function scrapboardCategories(includeInactive=false){ return scrapboardCategoryEntries(includeInactive).map(category=>category.label); }
+function scrapboardItems(includeInactive=false){
+  const itemSettings=db.pricing?.scrapboardItemSettings||{};
+  return rawScrapboardItems().map(item=>{
+    const setting=catalogOwnSetting(itemSettings,item.key);
+    const category=scrapboardCategoryEntry(setting.group||item.group,true)||scrapboardCategoryEntry(item.group,true);
+    const ownActive=setting.active!==false,active=ownActive&&category?.active!==false;
+    const resolved={...item,label:normalizedCatalogName(setting.label)||item.label,unit:['kg','pc'].includes(setting.unit)?setting.unit:item.unit,group:category?.label||item.group};
+    return {...resolved,ownActive,active};
+  }).filter(item=>includeInactive||item.active).map(item=>{
+    if(includeInactive)return item;
+    const {active,ownActive,...resolved}=item;return resolved;
+  });
+}
+function scrapboardItemCategoryKey(key){
+  const raw=rawScrapboardItems().find(item=>item.key===key);
+  if(!raw) return '';
+  const setting=catalogOwnSetting(db.pricing?.scrapboardItemSettings||{},key);
+  return scrapboardCategoryEntry(setting.group||raw.group,true)?.key||raw.group;
+}
+function scrapboardCategoryItems(key){
+  return scrapboardItems(true).filter(item=>scrapboardItemCategoryKey(item.key)===key);
+}
 function customScrapboardKey(name){
   const slug=normalizedCatalogName(name).toUpperCase().replace(/[^A-Z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,32)||'ITEM';
-  const used=new Set(scrapboardItems().map(item=>item.key));
+  const used=new Set(scrapboardItems(true).map(item=>item.key));
   let key='';
   do{ key=`CUSTOM_${slug}_${Math.random().toString(36).slice(2,8).toUpperCase()}`; }while(used.has(key));
   return key;
 }
-async function addScrapboardCategory(name){
+let scrapboardCatalogMutationQueue=Promise.resolve();
+function queueScrapboardCatalogMutation(operation){
+  const result=scrapboardCatalogMutationQueue.then(operation,operation);
+  scrapboardCatalogMutationQueue=result.then(()=>undefined,()=>undefined);
+  return result;
+}
+function addScrapboardCategory(name){ return queueScrapboardCatalogMutation(async()=>{
   if(!isAdmin()) return false;
   const category=normalizedCatalogName(name);
-  if(!category||scrapboardCategories().some(value=>value.toLowerCase()===category.toLowerCase())) return false;
+  if(!category||scrapboardCategoryEntries(true).some(entry=>entry.key.toLowerCase()===category.toLowerCase()||entry.label.toLowerCase()===category.toLowerCase())) return false;
   const before=[...(db.pricing.customScrapboardCategories||[])];
   db.pricing.customScrapboardCategories=[...before,category];
   if(await savePricingDB(false,'catalog')) return true;
   db.pricing.customScrapboardCategories=(db.pricing.customScrapboardCategories||[]).filter(value=>value!==category);
   return false;
-}
-async function addScrapboardItem(category,name,unit,rate){
+}); }
+function addScrapboardItem(category,name,unit,rate){ return queueScrapboardCatalogMutation(async()=>{
   if(!isAdmin()) return false;
   const group=normalizedCatalogName(category),label=normalizedCatalogName(name),normalizedUnit=String(unit||'').toLowerCase(),numericRate=Number(rate);
-  const resolvedCategory=scrapboardCategories().find(value=>value.toLowerCase()===group.toLowerCase());
+  const resolvedCategory=scrapboardCategoryEntry(group);
   if(!resolvedCategory||!label||!['kg','pc'].includes(normalizedUnit)||!Number.isInteger(numericRate)||numericRate<=0) return false;
-  if(scrapboardItems().some(item=>String(item.group).toLowerCase()===resolvedCategory.toLowerCase()&&String(item.label).toLowerCase()===label.toLowerCase())) return false;
+  if(scrapboardItems(true).some(item=>String(item.group).toLowerCase()===resolvedCategory.label.toLowerCase()&&String(item.label).toLowerCase()===label.toLowerCase())) return false;
   const beforeItems=[...(db.pricing.customScrapboardItems||[])],beforeRates={...(db.pricing.scrapboardRates||{})};
-  const item={key:customScrapboardKey(label),label,rate:numericRate,unit:normalizedUnit,group:resolvedCategory};
+  const item={key:customScrapboardKey(label),label,rate:numericRate,unit:normalizedUnit,group:resolvedCategory.key};
   db.pricing.customScrapboardItems=[...beforeItems,item];
   db.pricing.scrapboardRates[item.key]=numericRate;
   if(await savePricingDB(false,'catalog')) return true;
   db.pricing.customScrapboardItems=(db.pricing.customScrapboardItems||[]).filter(value=>value.key!==item.key);
   if(!db.pricing.customScrapboardItems.some(value=>value.key===item.key)) delete db.pricing.scrapboardRates[item.key];
   return false;
+}); }
+function scrapboardCatalogReferenced(key){
+  const visit=value=>{
+    if(value===key) return true;
+    if(Array.isArray(value)) return value.some(visit);
+    if(value&&typeof value==='object') return Object.values(value).some(visit);
+    return false;
+  };
+  return Object.entries(db).some(([name,value])=>name!=='pricing'&&name!=='pricingHistory'&&visit(value));
 }
+function catalogPricingSnapshot(){
+  return JSON.parse(JSON.stringify({
+    customScrapboardCategories:db.pricing.customScrapboardCategories||[],
+    customScrapboardItems:db.pricing.customScrapboardItems||[],
+    scrapboardCategorySettings:db.pricing.scrapboardCategorySettings||{},
+    scrapboardItemSettings:db.pricing.scrapboardItemSettings||{},
+    scrapboardRates:db.pricing.scrapboardRates||{}
+  }));
+}
+function restoreCatalogPricing(snapshot){ Object.assign(db.pricing,snapshot); }
+function editScrapboardCategory(key,changes){ return queueScrapboardCatalogMutation(async()=>{
+  if(!isAdmin()) return false;
+  const category=scrapboardCategoryEntry(key,true),label=normalizedCatalogName(changes?.label);
+  if(!category||!label) return false;
+  if(scrapboardCategoryEntries(true).some(entry=>entry.key!==category.key&&entry.label.toLowerCase()===label.toLowerCase())) return false;
+  const before=catalogPricingSnapshot();
+  db.pricing.scrapboardCategorySettings={...(db.pricing.scrapboardCategorySettings||{}),[category.key]:{label,active:changes?.active!==false}};
+  if(await savePricingDB(false,'catalog-management')) return true;
+  restoreCatalogPricing(before);return false;
+}); }
+function editScrapboardItem(key,changes){ return queueScrapboardCatalogMutation(async()=>{
+  if(!isAdmin()) return false;
+  const current=scrapboardItems(true).find(item=>item.key===key),category=scrapboardCategoryEntry(changes?.group,true);
+  const label=normalizedCatalogName(changes?.label),unit=String(changes?.unit||'').toLowerCase();
+  if(!current||!category||!label||!['kg','pc'].includes(unit)) return false;
+  if(scrapboardItems(true).some(item=>item.key!==key&&item.group.toLowerCase()===category.label.toLowerCase()&&item.label.toLowerCase()===label.toLowerCase())) return false;
+  const before=catalogPricingSnapshot();
+  db.pricing.scrapboardItemSettings={...(db.pricing.scrapboardItemSettings||{}),[key]:{label,group:category.key,unit,active:changes?.active!==false}};
+  if(await savePricingDB(false,'catalog-management')) return true;
+  restoreCatalogPricing(before);return false;
+}); }
+function deleteScrapboardItem(key){ return queueScrapboardCatalogMutation(async()=>{
+  if(!isAdmin()) return false;
+  const custom=(db.pricing.customScrapboardItems||[]).find(item=>item.key===key);
+  if(!custom||scrapboardCatalogReferenced(key)) return false;
+  const before=catalogPricingSnapshot();
+  db.pricing.customScrapboardItems=db.pricing.customScrapboardItems.filter(item=>item.key!==key);
+  const settings={...(db.pricing.scrapboardItemSettings||{})};delete settings[key];db.pricing.scrapboardItemSettings=settings;
+  const rates={...(db.pricing.scrapboardRates||{})};delete rates[key];db.pricing.scrapboardRates=rates;
+  if(await savePricingDB(false,'catalog-management')) return true;
+  restoreCatalogPricing(before);return false;
+}); }
+function deleteScrapboardCategory(key){ return queueScrapboardCatalogMutation(async()=>{
+  if(!isAdmin()) return false;
+  const category=scrapboardCategoryEntry(key,true);
+  if(!category?.custom) return false;
+  const hasItems=rawScrapboardItems().some(item=>{
+    const setting=catalogOwnSetting(db.pricing.scrapboardItemSettings||{},item.key);
+    return (scrapboardCategoryEntry(setting.group||item.group,true)?.key||item.group)===category.key;
+  });
+  if(hasItems) return false;
+  const before=catalogPricingSnapshot();
+  db.pricing.customScrapboardCategories=db.pricing.customScrapboardCategories.filter(value=>value!==category.key);
+  const settings={...(db.pricing.scrapboardCategorySettings||{})};delete settings[category.key];db.pricing.scrapboardCategorySettings=settings;
+  if(await savePricingDB(false,'catalog-management')) return true;
+  restoreCatalogPricing(before);return false;
+}); }
 const GRADE_META = { Gold: GOLD_GRADES, Silver: SILVER_GRADES, Platinum: PLATINUM_GRADES };
 const GRADES = Object.fromEntries(Object.entries(GRADE_META).map(([metal,grades])=>[metal,grades.map(g=>g.key)]));
 
@@ -492,7 +605,7 @@ function customPurityGradeKey(value){
   return `${Number(purity.toFixed(2))}%`;
 }
 function gradeLabel(metal, key){
-  if(metal==='Scrapboard') return scrapboardItems().find(item=>item.key===key)?.label||key;
+  if(metal==='Scrapboard') return scrapboardItems(true).find(item=>item.key===key)?.label||key;
   const g=gradeMeta(metal,key);
   if(g) return g.label;
   const customPurity=customPurityFromKey(key);
@@ -1018,6 +1131,76 @@ function scrapboardRateGroups(){
     return groups;
   },initial);
 }
+function catalogActionToken(value){ return encodeURIComponent(String(value)).replace(/'/g,'%27'); }
+function scrapboardCategoryCanDelete(key){
+  const category=scrapboardCategoryEntry(key,true);
+  return Boolean(category?.custom&&!scrapboardCategoryItems(category.key).length);
+}
+function scrapboardItemCanDelete(key){
+  return Boolean((db.pricing?.customScrapboardItems||[]).some(item=>item.key===key)&&!scrapboardCatalogReferenced(key));
+}
+function scrapboardCatalogManagementMarkup(){
+  const categories=scrapboardCategoryEntries(true);
+  return `<section class="scrap-catalog-manager"><div class="scrap-catalog-head"><div><div class="eyebrow">Catalog management</div><h2>Edit categories and items</h2><p>Rename, move, deactivate, or safely remove entries. Inactive entries stay in history but disappear from Buying and active rates.</p></div><span class="scrap-catalog-count">${scrapboardItems(true).length} items</span></div><div class="scrap-catalog-groups">${categories.map(category=>{
+    const items=scrapboardCategoryItems(category.key),categoryToken=catalogActionToken(category.key);
+    return `<article class="scrap-catalog-group${category.active?'':' is-inactive'}"><div class="scrap-catalog-group-head"><div><strong>${esc(category.label)}</strong>${category.active?'':'<span class="scrap-catalog-status">Inactive</span>'}<small>${items.length} item${items.length===1?'':'s'}</small></div><button class="btn secondary small" type="button" onclick="openScrapboardCategoryEditor('${categoryToken}')">Manage category</button></div><div class="scrap-catalog-items">${items.length?items.map(item=>`<div class="scrap-catalog-item"><div><strong>${esc(item.label)}</strong>${item.active?'':'<span class="scrap-catalog-status">Inactive</span>'}<small>${esc(item.unit)} · ${esc(item.key)}</small></div><button class="btn secondary small" type="button" onclick="openScrapboardItemEditor('${catalogActionToken(item.key)}')">Edit item</button></div>`).join(''):'<p class="scrap-catalog-empty">No items yet.</p>'}</div></article>`;
+  }).join('')}</div></section>`;
+}
+function scrapboardCategoryEditorMarkup(key){
+  const category=scrapboardCategoryEntry(key,true);
+  if(!category) return '';
+  const token=catalogActionToken(category.key),toggleLabel=category.active?'Deactivate':'Activate';
+  return `<div class="edit-modal scrap-catalog-modal" role="dialog" aria-modal="true" aria-labelledby="scrap_catalog_editor_title"><div class="summary-modal-head"><div><div class="eyebrow">Catalog management</div><h2 id="scrap_catalog_editor_title">Edit category</h2></div><button type="button" class="modal-close" onclick="closeScrapboardCatalogEditor()" aria-label="Close">×</button></div><div class="form-grid"><div class="field span-2"><label for="scrap_category_label">Category name</label><input id="scrap_category_label" maxlength="80" value="${esc(category.label)}"></div></div><p class="form-note">Deactivating this category hides all its items from new buying transactions without changing past records.</p><div class="form-actions scrap-catalog-modal-actions">${scrapboardCategoryCanDelete(category.key)?`<button type="button" class="btn danger" onclick="confirmDeleteScrapboardCategory('${token}')">Delete permanently</button>`:''}<button type="button" class="btn secondary" onclick="toggleScrapboardCategory('${token}')">${toggleLabel}</button><button type="button" class="btn" onclick="saveScrapboardCategoryEditor('${token}')">Save category</button></div></div>`;
+}
+function scrapboardItemEditorMarkup(key){
+  const item=scrapboardItems(true).find(entry=>entry.key===key);
+  if(!item) return '';
+  const categoryKey=scrapboardItemCategoryKey(key),token=catalogActionToken(key),toggleLabel=item.ownActive?'Deactivate':'Activate';
+  const categories=scrapboardCategoryEntries(true);
+  return `<div class="edit-modal scrap-catalog-modal" role="dialog" aria-modal="true" aria-labelledby="scrap_item_editor_title"><div class="summary-modal-head"><div><div class="eyebrow">Catalog management</div><h2 id="scrap_item_editor_title">Edit item</h2></div><button type="button" class="modal-close" onclick="closeScrapboardCatalogEditor()" aria-label="Close">×</button></div><div class="form-grid"><div class="field span-2"><label for="scrap_item_label">Item name</label><input id="scrap_item_label" maxlength="100" value="${esc(item.label)}"></div><div class="field"><label for="scrap_item_category">Category</label><select id="scrap_item_category">${categories.map(category=>`<option value="${esc(category.key)}" ${category.key===categoryKey?'selected':''}>${esc(category.label)}${category.active?'':' (inactive)'}</option>`).join('')}</select></div><div class="field"><label for="scrap_item_unit">Buying unit</label><select id="scrap_item_unit"><option value="kg" ${item.unit==='kg'?'selected':''}>kg</option><option value="pc" ${item.unit==='pc'?'selected':''}>pc</option></select></div></div><p class="form-note">Deactivated items remain available in transaction history but cannot be selected for new purchases.</p><div class="form-actions scrap-catalog-modal-actions">${scrapboardItemCanDelete(key)?`<button type="button" class="btn danger" onclick="confirmDeleteScrapboardItem('${token}')">Delete permanently</button>`:''}<button type="button" class="btn secondary" onclick="toggleScrapboardItem('${token}')">${toggleLabel}</button><button type="button" class="btn" onclick="saveScrapboardItemEditor('${token}')">Save item</button></div></div>`;
+}
+function closeScrapboardCatalogEditor(){ document.getElementById('scrapboard_catalog_editor')?.remove(); }
+function openScrapboardCatalogModal(markup){
+  if(!isAdmin()||!markup) return;
+  closeScrapboardCatalogEditor();
+  const modal=document.createElement('div');modal.id='scrapboard_catalog_editor';modal.className='modal-backdrop';modal.innerHTML=markup;
+  modal.addEventListener('click',event=>{if(event.target===modal)closeScrapboardCatalogEditor();});
+  document.body.appendChild(modal);modal.querySelector('input')?.focus();
+}
+function openScrapboardCategoryEditor(token){ openScrapboardCatalogModal(scrapboardCategoryEditorMarkup(decodeURIComponent(token))); }
+function openScrapboardItemEditor(token){ openScrapboardCatalogModal(scrapboardItemEditorMarkup(decodeURIComponent(token))); }
+async function saveScrapboardCategoryEditor(token){
+  const key=decodeURIComponent(token),category=scrapboardCategoryEntry(key,true),label=normalizedCatalogName(val('scrap_category_label'));
+  if(!category||!label){toast('Enter a category name');return;}
+  if(!await editScrapboardCategory(key,{label,active:category.active})){toast('Category was not saved. Check for a duplicate name.');return;}
+  closeScrapboardCatalogEditor();render();toast(`${label} category saved`);
+}
+async function toggleScrapboardCategory(token){
+  const key=decodeURIComponent(token),category=scrapboardCategoryEntry(key,true);if(!category)return;
+  if(!await editScrapboardCategory(key,{label:category.label,active:!category.active})){toast('Category status was not changed');return;}
+  closeScrapboardCatalogEditor();render();toast(`Category ${category.active?'deactivated':'activated'}`);
+}
+async function saveScrapboardItemEditor(token){
+  const key=decodeURIComponent(token),item=scrapboardItems(true).find(entry=>entry.key===key),label=normalizedCatalogName(val('scrap_item_label')),group=val('scrap_item_category'),unit=val('scrap_item_unit');
+  if(!item||!label){toast('Enter an item name');return;}
+  if(!await editScrapboardItem(key,{label,group,unit,active:item.ownActive})){toast('Item was not saved. Check for a duplicate name.');return;}
+  closeScrapboardCatalogEditor();render();toast(`${label} saved`);
+}
+async function toggleScrapboardItem(token){
+  const key=decodeURIComponent(token),item=scrapboardItems(true).find(entry=>entry.key===key);if(!item)return;
+  if(!await editScrapboardItem(key,{label:item.label,group:scrapboardItemCategoryKey(key),unit:item.unit,active:!item.ownActive})){toast('Item status was not changed');return;}
+  closeScrapboardCatalogEditor();render();toast(`Item ${item.ownActive?'deactivated':'activated'}`);
+}
+async function confirmDeleteScrapboardItem(token){
+  const key=decodeURIComponent(token),item=scrapboardItems(true).find(entry=>entry.key===key);if(!item||!confirm(`Permanently delete “${item.label}”?`))return;
+  if(!await deleteScrapboardItem(key)){toast('This item cannot be deleted because it is built-in or used in history');return;}
+  closeScrapboardCatalogEditor();render();toast(`${item.label} permanently deleted`);
+}
+async function confirmDeleteScrapboardCategory(token){
+  const key=decodeURIComponent(token),category=scrapboardCategoryEntry(key,true);if(!category||!confirm(`Permanently delete “${category.label}”?`))return;
+  if(!await deleteScrapboardCategory(key)){toast('Only an empty custom category can be permanently deleted');return;}
+  closeScrapboardCatalogEditor();render();toast(`${category.label} permanently deleted`);
+}
 function renderRates(){
   const editable=canEditDailyRates();
   const groups=scrapboardRateGroups();
@@ -1027,8 +1210,8 @@ function renderRates(){
   </section>
   ${isAdmin()?`<section class="scrap-quick-add"><div><div class="eyebrow">Quick add</div><h2>Add categories and buying items</h2><p>New items are saved to the shared rate list and appear automatically on the Buying page.</p></div><div class="scrap-quick-add-grid">
     <div class="scrap-quick-add-form"><h3>New category</h3><div class="field"><label for="quick_add_category_name">Category name</label><input id="quick_add_category_name" maxlength="80" placeholder="e.g. Charger boards"></div><button class="btn secondary small" type="button" onclick="submitScrapboardCategory()">Add category</button></div>
-    <div class="scrap-quick-add-form"><h3>New item</h3><div class="field"><label for="quick_add_item_category">Category</label><select id="quick_add_item_category">${scrapboardCategories().map(category=>`<option value="${esc(category)}">${esc(category)}</option>`).join('')}</select></div><div class="field"><label for="quick_add_item_name">Item name</label><input id="quick_add_item_name" maxlength="100" placeholder="e.g. Type-C port"></div><div class="scrap-quick-add-row"><div class="field"><label for="quick_add_item_unit">Unit</label><select id="quick_add_item_unit"><option value="kg">kg</option><option value="pc">pc</option></select></div><div class="field"><label for="quick_add_item_rate">Starting rate</label><input id="quick_add_item_rate" type="number" min="1" step="1" placeholder="0"></div></div><button class="btn secondary small" type="button" onclick="submitScrapboardItem()">Add item</button></div>
-  </div></section>`:''}
+    <div class="scrap-quick-add-form"><h3>New item</h3><div class="field"><label for="quick_add_item_category">Category</label><select id="quick_add_item_category">${scrapboardCategoryEntries().map(category=>`<option value="${esc(category.key)}">${esc(category.label)}</option>`).join('')}</select></div><div class="field"><label for="quick_add_item_name">Item name</label><input id="quick_add_item_name" maxlength="100" placeholder="e.g. Type-C port"></div><div class="scrap-quick-add-row"><div class="field"><label for="quick_add_item_unit">Unit</label><select id="quick_add_item_unit"><option value="kg">kg</option><option value="pc">pc</option></select></div><div class="field"><label for="quick_add_item_rate">Starting rate</label><input id="quick_add_item_rate" type="number" min="1" step="1" placeholder="0"></div></div><button class="btn secondary small" type="button" onclick="submitScrapboardItem()">Add item</button></div>
+  </div></section>${scrapboardCatalogManagementMarkup()}`:''}
   ${Object.entries(groups).map(([group,items])=>`<section class="scrap-rate-section"><h3>${esc(group)}</h3><div class="scrap-rate-grid">
     ${items.map(item=>`<div class="scrap-rate-card"><div><label for="scrap_rate_${item.key}">${esc(item.label)}</label><small>Philippine peso / ${item.unit}</small></div><div class="scrap-rate-input"><span>₱</span><input id="scrap_rate_${item.key}" type="number" min="1" step="1" value="${roundPeso(db.pricing.scrapboardRates?.[item.key]||item.rate)}" ${editable?'':'readonly aria-readonly="true"'}></div></div>`).join('')}
   </div></section>`).join('')}
@@ -1036,7 +1219,7 @@ function renderRates(){
 }
 async function saveScrapboardRates(){
   if(!canEditDailyRates()){toast('Daily rates are locked by the administrator');return;}
-  const next={};
+  const next={...(db.pricing.scrapboardRates||{})};
   for(const item of scrapboardItems()){
     const rate=roundPeso(Number(val(`scrap_rate_${item.key}`)));
     if(!Number.isFinite(rate)||rate<=0){toast(`Enter a valid rate for ${item.label}`);document.getElementById(`scrap_rate_${item.key}`)?.focus();return;}
@@ -1049,17 +1232,19 @@ async function saveScrapboardRates(){
 async function submitScrapboardCategory(){
   const input=document.getElementById('quick_add_category_name'),name=normalizedCatalogName(input?.value);
   if(!name){toast('Enter a category name');input?.focus();return;}
-  if(scrapboardCategories().some(category=>category.toLowerCase()===name.toLowerCase())){toast('That category already exists');input?.focus();return;}
+  if(scrapboardCategoryEntries(true).some(category=>category.key.toLowerCase()===name.toLowerCase()||category.label.toLowerCase()===name.toLowerCase())){toast('That category already exists');input?.focus();return;}
   if(!await addScrapboardCategory(name)){toast('Category was not saved');return;}
   render();toast(`${name} category added`);
 }
 async function submitScrapboardItem(){
   const category=val('quick_add_item_category'),name=normalizedCatalogName(val('quick_add_item_name')),unit=val('quick_add_item_unit'),rate=Number(val('quick_add_item_rate'));
+  const categoryEntry=scrapboardCategoryEntry(category);
   if(!name){toast('Enter an item name');document.getElementById('quick_add_item_name')?.focus();return;}
   if(!Number.isInteger(rate)||rate<=0){toast('Enter a whole-peso starting rate');document.getElementById('quick_add_item_rate')?.focus();return;}
-  if(scrapboardItems().some(item=>String(item.group).toLowerCase()===category.toLowerCase()&&String(item.label).toLowerCase()===name.toLowerCase())){toast('That item already exists in this category');return;}
+  if(!categoryEntry){toast('Choose a valid category');return;}
+  if(scrapboardItems().some(item=>String(item.group).toLowerCase()===categoryEntry.label.toLowerCase()&&String(item.label).toLowerCase()===name.toLowerCase())){toast('That item already exists in this category');return;}
   if(!await addScrapboardItem(category,name,unit,rate)){toast('Item was not saved');return;}
-  render();toast(`${name} added to ${category}`);
+  render();toast(`${name} added to ${categoryEntry.label}`);
 }
 function renderRateDownloadButton(){
   const icon=`<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 15v4h14v-4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -5138,7 +5323,11 @@ function renderReports(){
 
 /* ============================= INIT ============================= */
 /* ============================= SCRAPBOARD BUYING EXPERIENCE ============================= */
-function scrapboardItem(key){ return scrapboardItems().find(item=>item.key===key)||SCRAPBOARD_ITEMS[0]; }
+function scrapboardItem(key){
+  const resolved=scrapboardItems(true).find(item=>item.key===key);
+  if(!resolved)return SCRAPBOARD_ITEMS[0];
+  const {active,ownActive,...item}=resolved;return item;
+}
 function purchaseQuantityLabel(item){
   const fallbackQuantity=item.unit==='kg'?Number(item.netWeight||0)/1000:Number(item.netWeight||0);
   const quantity=Number(item.purchaseQuantity??fallbackQuantity);
@@ -5146,11 +5335,13 @@ function purchaseQuantityLabel(item){
 }
 function renderBuying(){
   rollDefaultBuyingDraftDateForward();
+  const activeItems=scrapboardItems();
+  if(!activeItems.length) return `<div id="buying_cashflow_card">${cashflowCardMarkup()}</div><section class="block"><h2 class="block-title">No active scrapboard items</h2><p class="form-note">Ask an administrator to activate an item in Daily Rates before recording a purchase.</p></section>`;
   const sellerName=buyingDraftValue('b_seller_name');
   const savedCustomer=db.customers.find(customer=>String(customer.name).trim().toLowerCase()===sellerName.trim().toLowerCase());
   const customerStatus=!sellerName?'Optional — leave blank for a walk-in seller.':savedCustomer?`Using saved seller: ${savedCustomer.name}`:`“${sellerName}” will be saved as a new seller.`;
   const requested=buyingDraftValue('b_karat');
-  const key=scrapboardItems().some(item=>item.key===requested)?requested:SCRAPBOARD_ITEMS[0].key;
+  const key=activeItems.some(item=>item.key===requested)?requested:activeItems[0].key;
   const item=scrapboardItem(key),rateObj=activeRate('Scrapboard',key);
   const quantityValue=buyingDraftValue('b_gross'),quantity=parseFloat(quantityValue)||0;
   const systemRate=roundPeso(rateObj?.rate||0),enteredRate=buyingDraftValue('b_rate'),parsedRate=Number(enteredRate);

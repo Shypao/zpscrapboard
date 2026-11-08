@@ -49,6 +49,26 @@ test('catalog scope merges additions without deleting current definitions', () =
   assert.equal(result.scrapboardRates.CUSTOM_SECOND, 50);
 });
 
+test('catalog-management scope applies authoritative edits and deletions without changing unrelated pricing', () => {
+  const candidate = structuredClone(currentPricing);
+  candidate.customScrapboardCategories = [];
+  candidate.customScrapboardItems = [];
+  candidate.scrapboardRates = { A6: 1500 };
+  candidate.scrapboardCategorySettings = { 'Whole boards': { label: 'Main boards', active: true } };
+  candidate.scrapboardItemSettings = { A6: { label: 'Premium A6', group: 'Whole boards', unit: 'pc', active: false } };
+  const result = serverPricingProbe(`
+    const result = server.isolatedPricingUpdate(${JSON.stringify(currentPricing)}, ${JSON.stringify(candidate)}, 'catalog-management');
+    process.stdout.write(JSON.stringify(result));
+  `);
+  assert.deepEqual(result.customScrapboardCategories, []);
+  assert.deepEqual(result.customScrapboardItems, []);
+  assert.deepEqual(result.scrapboardCategorySettings, candidate.scrapboardCategorySettings);
+  assert.deepEqual(result.scrapboardItemSettings, candidate.scrapboardItemSettings);
+  assert.equal(result.scrapboardRates.CUSTOM_NEW, undefined);
+  assert.equal(result.scrapboardRates.A6, 1500);
+  assert.deepEqual(result.gold, currentPricing.gold);
+});
+
 test('staff rate validation accepts persisted custom item keys without catalog changes', () => {
   const candidate = structuredClone(currentPricing);
   candidate.scrapboardRates.CUSTOM_NEW = 30;
@@ -58,6 +78,71 @@ test('staff rate validation accepts persisted custom item keys without catalog c
   `);
   assert.equal(result.scrapboardRates.CUSTOM_NEW, 30);
   assert.deepEqual(result.customScrapboardItems, currentPricing.customScrapboardItems);
+});
+
+test('legacy pricing passes through the internal update pipeline for staff saves', () => {
+  const candidate = structuredClone(currentPricing);
+  candidate.scrapboardRates.A6 = 1600;
+  const result = serverPricingProbe(`
+    const current = ${JSON.stringify(currentPricing)};
+    const candidate = ${JSON.stringify(candidate)};
+    const isolated = server.isolatedPricingUpdate(current, candidate, 'internal');
+    let output;
+    try { output = { pricing: server.staffEditablePricing(current, isolated) }; }
+    catch (error) { output = { error: error.message }; }
+    process.stdout.write(JSON.stringify(output));
+  `);
+  assert.equal(result.error, undefined);
+  assert.equal(result.pricing.scrapboardRates.A6, 1600);
+});
+
+test('catalog management rejects deletion of a historically referenced custom item', () => {
+  const candidate = structuredClone(currentPricing);
+  candidate.customScrapboardItems = [];
+  candidate.scrapboardRates = { A6: 1500 };
+  const result = serverPricingProbe(`
+    const state = { pricing: ${JSON.stringify(currentPricing)}, stock: [{ id: 'stock-1', metal: 'Scrapboard', karat: 'CUSTOM_NEW' }] };
+    let message = '';
+    try { server.validateCatalogManagementCandidate(state, ${JSON.stringify(candidate)}); } catch (error) { message = error.message; }
+    process.stdout.write(JSON.stringify({ message }));
+  `);
+  assert.match(result.message, /used in history/i);
+});
+
+test('catalog management rejects duplicate normalized category labels', () => {
+  const candidate = structuredClone(currentPricing);
+  candidate.customScrapboardCategories = ['Custom', 'Second'];
+  candidate.scrapboardCategorySettings = { Custom: { label: 'Same Name', active: true }, Second: { label: ' same   name ', active: true } };
+  const result = serverPricingProbe(`
+    let message = '';
+    try { server.validateCatalogManagementCandidate({ pricing: ${JSON.stringify(currentPricing)} }, ${JSON.stringify(candidate)}); } catch (error) { message = error.message; }
+    process.stdout.write(JSON.stringify({ message }));
+  `);
+  assert.match(result.message, /duplicate category/i);
+});
+
+test('catalog management rejects invalid custom item units and missing groups', () => {
+  const candidate = structuredClone(currentPricing);
+  candidate.customScrapboardItems = [{ key: 'CUSTOM_NEW', label: 'New', group: 'Missing group', unit: 'box', rate: 25 }];
+  const result = serverPricingProbe(`
+    let message = '';
+    try { server.validateCatalogManagementCandidate({ pricing: ${JSON.stringify(currentPricing)} }, ${JSON.stringify(candidate)}); } catch (error) { message = error.message; }
+    process.stdout.write(JSON.stringify({ message }));
+  `);
+  assert.match(result.message, /unit|category/i);
+});
+
+test('catalog management allows deleting a custom category after its last item moved by override', () => {
+  const movedCurrent = structuredClone(currentPricing);
+  movedCurrent.scrapboardItemSettings = { CUSTOM_NEW: { label: 'New', group: 'Whole boards', unit: 'pc', active: true } };
+  const candidate = structuredClone(movedCurrent);
+  candidate.customScrapboardCategories = [];
+  const result = serverPricingProbe(`
+    let message = '';
+    try { server.validateCatalogManagementCandidate({ pricing: ${JSON.stringify(movedCurrent)} }, ${JSON.stringify(candidate)}); } catch (error) { message = error.message; }
+    process.stdout.write(JSON.stringify({ message }));
+  `);
+  assert.equal(result.message, '');
 });
 
 test('pricing revision guard rejects stale writes', () => {

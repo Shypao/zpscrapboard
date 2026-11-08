@@ -75,6 +75,30 @@ const DEFAULT_SCRAPBOARD_RATES: Record<string, number> = {
   '6531E':25,'6531':19,'6261':22,'6533':15,'6500':12,RDA8851_88X9:10,'9863A_9832A':150,'27AD':50,EXYNOS:50,
   CAMERA_A:4800,CAMERA_B:1000,LCD_PHONE:30,CP_BATTERY:70,LAPTOP_BATTERY:50,KEYPAD_BUO:15,NOKIA_ORIG_BUO:80
 };
+const DEFAULT_SCRAPBOARD_ITEMS: Array<{key:string;label:string;group:string;unit:'kg'|'pc'}> = [
+  ...['A6','A5','A4','A3','A2','A1'].map(key=>({key,label:key,group:'IC chips · A series',unit:'kg' as const})),
+  ...['NC512','NC256','NC128','NC64','NC32','NC16','NC8'].map(key=>({key,label:key.replace('NC','NC '),group:'IC chips · NC series',unit:'kg' as const})),
+  {key:'AMINUS8G',label:'A Minus (8g)',group:'IC chips · Phone processors',unit:'pc'},
+  {key:'6580_7731E_A1',label:'6580 / 7731E A1',group:'IC chips · Phone processors',unit:'pc'},
+  {key:'6580B',label:'6580 B',group:'IC chips · Phone processors',unit:'pc'},
+  {key:'6580C',label:'6580 C',group:'IC chips · Phone processors',unit:'pc'},
+  {key:'7731E_BC',label:'7731E B/C',group:'IC chips · Phone processors',unit:'pc'},
+  {key:'IPHONE_XR_UP',label:'iPhone XR pataas',group:'IC chips · Phone processors',unit:'pc'},
+  {key:'IPHONE_TAB_BOARD',label:'iPhone / iPad board',group:'IC chips · Phone processors',unit:'pc'},
+  {key:'IPHONE_BOARD',label:'iPhone board',group:'IC chips · Phone processors',unit:'pc'},
+  {key:'TABLET',label:'Tablet',group:'Whole boards',unit:'kg'}, {key:'CHINA',label:'China',group:'Whole boards',unit:'kg'},
+  {key:'SAMSUNG',label:'Samsung',group:'Whole boards',unit:'kg'}, {key:'SAMSUNG_TAB',label:'Samsung tablet',group:'Whole boards',unit:'kg'},
+  {key:'NOKIA_ORIG',label:'Nokia original',group:'Whole boards',unit:'kg'}, {key:'ANDROID_B',label:'Android B',group:'Whole boards',unit:'pc'},
+  {key:'ANDROID_C',label:'Android C',group:'Whole boards',unit:'pc'},
+  ...['6531E','6531','6261','6533','6500'].map(key=>({key,label:key,group:'IC chips · Keypad codes',unit:'pc' as const})),
+  {key:'RDA8851_88X9',label:'RDA 8851 / 88X9',group:'IC chips · Keypad codes',unit:'pc'},
+  {key:'9863A_9832A',label:'9863A / 9832A',group:'IC chips · Keypad codes',unit:'pc'},
+  {key:'27AD',label:'27AD',group:'IC chips · Keypad codes',unit:'pc'}, {key:'EXYNOS',label:'Exynos',group:'IC chips · Keypad codes',unit:'pc'},
+  {key:'CAMERA_A',label:'Camera A',group:'Parts & batteries',unit:'kg'}, {key:'CAMERA_B',label:'Camera B',group:'Parts & batteries',unit:'kg'},
+  {key:'LCD_PHONE',label:'LCD phone',group:'Parts & batteries',unit:'kg'}, {key:'CP_BATTERY',label:'Cellphone battery',group:'Parts & batteries',unit:'kg'},
+  {key:'LAPTOP_BATTERY',label:'Laptop battery',group:'Parts & batteries',unit:'kg'},
+  {key:'KEYPAD_BUO',label:'Keypad buo',group:'Whole units',unit:'pc'}, {key:'NOKIA_ORIG_BUO',label:'Nokia original buo',group:'Whole units',unit:'pc'}
+];
 
 export function validatePublicDailyRates(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -113,8 +137,82 @@ function pricingCustomItems(pricing: PricingSettings | null): Array<Record<strin
   return Array.isArray(values)?values.filter(value=>value&&typeof value==='object').map(value=>({...value})):[];
 }
 
-export function isolatedPricingUpdate(current: PricingSettings | null, candidate: PricingSettings, scope: 'internal' | 'public' | 'catalog'): PricingSettings {
+function pricingCatalogSettings(pricing: PricingSettings | null, key: 'scrapboardCategorySettings' | 'scrapboardItemSettings'): Record<string, Record<string, any>> {
+  const value=(pricing as Record<string,any> | null)?.[key];
+  if(!value||typeof value!=='object'||Array.isArray(value))return {};
+  return Object.fromEntries(Object.entries(value).filter(([,setting])=>setting&&typeof setting==='object'&&!Array.isArray(setting)).map(([name,setting])=>[name,{...(setting as Record<string,any>)}]));
+}
+
+function normalizedCatalogLabel(value:unknown):string{return String(value??'').trim().replace(/\s+/g,' ');}
+function stateReferencesCatalogKey(state:Record<string,any>,key:string):boolean{
+  const visit=(value:unknown):boolean=>value===key||(Array.isArray(value)?value.some(visit):Boolean(value&&typeof value==='object'&&Object.values(value as Record<string,unknown>).some(visit)));
+  return Object.entries(state).some(([name,value])=>name!=='pricing'&&name!=='pricingHistory'&&visit(value));
+}
+export function validateCatalogManagementCandidate(state:Record<string,any>,candidate:PricingSettings):void{
+  const current=(state.pricing&&typeof state.pricing==='object'?state.pricing:{}) as PricingSettings;
+  const builtInCategories=[...new Set(DEFAULT_SCRAPBOARD_ITEMS.map(item=>item.group))];
+  const customCategories=pricingCustomCategories(candidate),categoryKeys=[...builtInCategories,...customCategories];
+  if(new Set(customCategories.map(value=>value.toLowerCase())).size!==customCategories.length)throw new Error('Duplicate category key');
+  const categorySettings=pricingCatalogSettings(candidate,'scrapboardCategorySettings');
+  if(Object.keys(categorySettings).some(key=>!categoryKeys.includes(key)))throw new Error('Invalid category setting');
+  const categoryLabels=new Set<string>();
+  for(const key of categoryKeys){
+    const label=normalizedCatalogLabel(categorySettings[key]?.label)||key,normalized=label.toLowerCase();
+    if(categoryLabels.has(normalized))throw new Error('Duplicate category label');
+    categoryLabels.add(normalized);
+    if(categorySettings[key]?.active!==undefined&&typeof categorySettings[key].active!=='boolean')throw new Error('Invalid category active state');
+  }
+
+  const customItems=pricingCustomItems(candidate),customItemKeys=new Set<string>(),itemSettings=pricingCatalogSettings(candidate,'scrapboardItemSettings');
+  for(const item of customItems){
+    const key=String(item.key||''),setting=itemSettings[key]||{};
+    if(!key||customItemKeys.has(key)||Object.prototype.hasOwnProperty.call(DEFAULT_SCRAPBOARD_RATES,key))throw new Error('Duplicate or invalid item key');
+    customItemKeys.add(key);
+    if(!normalizedCatalogLabel(setting.label||item.label))throw new Error('Invalid item label');
+    if(!['kg','pc'].includes(String(setting.unit||item.unit)))throw new Error('Invalid item unit');
+    if(!categoryKeys.includes(String(setting.group||item.group)))throw new Error('Invalid item category');
+  }
+  const allItems=[...DEFAULT_SCRAPBOARD_ITEMS,...customItems.map(item=>({key:String(item.key),label:normalizedCatalogLabel(item.label),group:String(item.group),unit:String(item.unit) as 'kg'|'pc'}))];
+  const itemKeys=new Set(allItems.map(item=>item.key));
+  if(Object.keys(itemSettings).some(key=>!itemKeys.has(key)))throw new Error('Invalid item setting');
+  const itemLabelsByCategory=new Set<string>();
+  for(const item of allItems){
+    const setting=itemSettings[item.key]||{},label=normalizedCatalogLabel(setting.label)||item.label,group=String(setting.group||item.group),unit=String(setting.unit||item.unit);
+    if(!categoryKeys.includes(group))throw new Error('Invalid item category');
+    if(!['kg','pc'].includes(unit))throw new Error('Invalid item unit');
+    if(setting.active!==undefined&&typeof setting.active!=='boolean')throw new Error('Invalid item active state');
+    const duplicateKey=`${group.toLowerCase()}\u0000${label.toLowerCase()}`;
+    if(itemLabelsByCategory.has(duplicateKey))throw new Error('Duplicate item label');
+    itemLabelsByCategory.add(duplicateKey);
+  }
+  const rates=(candidate as Record<string,any>).scrapboardRates;
+  if(!rates||typeof rates!=='object'||Array.isArray(rates))throw new Error('Invalid scrapboard rates');
+  for(const [key,value] of Object.entries(rates))if(!itemKeys.has(key)||!Number.isInteger(Number(value))||Number(value)<=0)throw new Error('Invalid scrapboard rate');
+  for(const item of customItems)if(!Number.isInteger(Number(rates[item.key]))||Number(rates[item.key])<=0)throw new Error('Missing custom item rate');
+
+  const removedItems=pricingCustomItems(current).filter(item=>!customItemKeys.has(String(item.key)));
+  for(const item of removedItems)if(stateReferencesCatalogKey(state,String(item.key)))throw new Error(`Item ${String(item.key)} is used in history`);
+  const currentItemSettings=pricingCatalogSettings(current,'scrapboardItemSettings');
+  const removedCategories=pricingCustomCategories(current).filter(key=>!customCategories.includes(key));
+  for(const key of removedCategories){
+    const hasCurrentItems=pricingCustomItems(current).some(item=>String(currentItemSettings[String(item.key)]?.group||item.group)===key);
+    if(hasCurrentItems)throw new Error(`Category ${key} still contains items`);
+  }
+}
+
+export function isolatedPricingUpdate(current: PricingSettings | null, candidate: PricingSettings, scope: 'internal' | 'public' | 'catalog' | 'catalog-management'): PricingSettings {
   if (scope === 'public') return { ...current, publicDailyRates: candidate.publicDailyRates };
+  if(scope==='catalog-management'&&current){
+    const currentRecord=JSON.parse(JSON.stringify(current)) as Record<string,any>;
+    const candidateRecord=JSON.parse(JSON.stringify(candidate)) as Record<string,any>;
+    return {...currentRecord,
+      customScrapboardCategories:pricingCustomCategories(candidate),
+      customScrapboardItems:pricingCustomItems(candidate),
+      scrapboardCategorySettings:pricingCatalogSettings(candidate,'scrapboardCategorySettings'),
+      scrapboardItemSettings:pricingCatalogSettings(candidate,'scrapboardItemSettings'),
+      scrapboardRates:{...(candidateRecord.scrapboardRates??{})}
+    };
+  }
   if (scope === 'catalog' && current) {
     const currentRecord=JSON.parse(JSON.stringify(current)) as Record<string,any>;
     const candidateRecord=JSON.parse(JSON.stringify(candidate)) as Record<string,any>;
@@ -138,6 +236,8 @@ export function isolatedPricingUpdate(current: PricingSettings | null, candidate
     const currentRecord=current as Record<string,any>,candidateRecord=candidate as Record<string,any>;
     next.customScrapboardCategories=pricingCustomCategories(current);
     next.customScrapboardItems=pricingCustomItems(current);
+    next.scrapboardCategorySettings=pricingCatalogSettings(current,'scrapboardCategorySettings');
+    next.scrapboardItemSettings=pricingCatalogSettings(current,'scrapboardItemSettings');
     const candidateKeys=new Set(pricingCustomItems(candidate).map(item=>String(item.key)));
     const nextRates={...(candidateRecord.scrapboardRates??{})};
     for(const item of pricingCustomItems(current)){
@@ -945,6 +1045,10 @@ export function staffEditablePricing(currentPricing: PricingSettings, candidateP
   delete immutableCandidate.dailyFormula; delete immutableCurrent.dailyFormula;
   delete immutableCandidate.scrapboardRates; delete immutableCurrent.scrapboardRates;
   delete immutableCandidate.effectiveDate; delete immutableCurrent.effectiveDate;
+  for(const key of ['scrapboardCategorySettings','scrapboardItemSettings'] as const){
+    immutableCandidate[key]=pricingCatalogSettings(candidate as PricingSettings,key);
+    immutableCurrent[key]=pricingCatalogSettings(current as PricingSettings,key);
+  }
   for (const metal of metals) {
     immutableCandidate[metal] = immutableCandidate[metal] ?? {};
     immutableCurrent[metal] = immutableCurrent[metal] ?? {};
@@ -1127,16 +1231,17 @@ export async function requestHandler(request: IncomingMessage, response: ServerR
       if (user!.role !== 'admin' && pricingHistory !== undefined) return sendJson(response, 403, { error: 'Only administrators can save rate-sheet history' });
       const current = await loadState();
       const scope = body.scope ?? 'internal';
-      if (scope !== 'internal' && scope !== 'public' && scope !== 'catalog') return sendJson(response, 400, { error: 'Invalid pricing scope' });
+      if (scope !== 'internal' && scope !== 'public' && scope !== 'catalog' && scope !== 'catalog-management') return sendJson(response, 400, { error: 'Invalid pricing scope' });
       if (scope === 'public') {
         if (user!.role !== 'admin') return sendJson(response, 403, { error: 'Only administrators can edit public daily rates' });
         if (!validatePublicDailyRates((pricing as PricingSettings).publicDailyRates)) return sendJson(response, 400, { error: 'Invalid public daily rates' });
         if (pricingHistory !== undefined) return sendJson(response, 400, { error: 'Public rates cannot change internal rate history' });
       }
-      if(scope==='catalog'&&user!.role!=='admin')return sendJson(response,403,{error:'Only administrators can add categories or items'});
+      if((scope==='catalog'||scope==='catalog-management')&&user!.role!=='admin')return sendJson(response,403,{error:'Only administrators can manage categories or items'});
       const expectedRevision=Number(body.revision);
       assertPricingRevision(expectedRevision,Number(current._revision||0));
       const candidatePricing = isolatedPricingUpdate(current.pricing, pricing as PricingSettings, scope);
+      if(scope==='catalog'||scope==='catalog-management')validateCatalogManagementCandidate(current as unknown as Record<string,any>,candidatePricing);
       const nextPricing = user!.role === 'admin'
         ? candidatePricing
         : staffEditablePricing(current.pricing as PricingSettings, candidatePricing);
