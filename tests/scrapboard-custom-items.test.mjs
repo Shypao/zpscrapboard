@@ -253,12 +253,27 @@ test('Daily Rates offers PNG and JPG downloads for the scrapboard overview', asy
   assert.match(html, /Download JPG/);
 });
 
+test('Daily Rates groups IC chips under one category with subcategories', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+
+  const html = api.renderRates();
+  assert.match(html, /<h3>IC chips<\/h3>/);
+  assert.match(html, /<h4>A series<\/h4>/);
+  assert.match(html, /<h4>NC series<\/h4>/);
+  assert.match(html, /<h4>Phone processors<\/h4>/);
+  assert.match(html, /<h4>Keypad codes<\/h4>/);
+  assert.doesNotMatch(html, /<h3>IC chips ·/);
+  assert.match(html, /<h3>Whole boards<\/h3>/);
+});
+
 test('downloadable scrapboard overview uses the active catalog groups and rates', async () => {
   const source = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
   const generator = source.match(/async function downloadScrapboardRateSheetImage\([\s\S]*?\n\}/)?.[0] || '';
 
   assert.match(generator, /scrapboardRateGroups\(\)/);
   assert.match(generator, /db\.pricing\.scrapboardRates/);
+  assert.match(generator, /scrapboardRateSections\(groups\)/);
   assert.match(generator, /SCRAPBOARD TRADING/);
   assert.doesNotMatch(generator, /GOLD_GRADES|SILVER_GRADES|PLATINUM_GRADES/);
 });
