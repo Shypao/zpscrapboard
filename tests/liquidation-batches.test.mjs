@@ -1405,7 +1405,7 @@ test('inventory lists transactions newest first, including transactions on the s
   assert.ok(html.indexOf('Newer transaction') < html.indexOf('Older transaction'));
 });
 
-test('editing a pool can classify its active balance for refining', async () => {
+test('editing a pool offers only Available and On Hold classifications', async () => {
   const api = await loadInventoryApi();
   const state = stateFixture();
   state.stock = [
@@ -1416,18 +1416,15 @@ test('editing a pool can classify its active balance for refining', async () => 
   api.setState(state);
 
   const editModal = api.openPoolEdit('POOL-REFINE');
-  assert.match(editModal, /<option[^>]*>For Refining<\/option>/);
+  assert.match(editModal, /<option[^>]*>Available<\/option>/);
+  assert.match(editModal, /<option[^>]*>On Hold<\/option>/);
+  assert.doesNotMatch(editModal, /For Refining|For Processing/);
 
-  const refining = api.setPoolClassification('POOL-REFINE', 'For Refining');
-  assert.equal(refining.result, true);
-  assert.equal(refining.pool.onHold, false);
-  assert.equal(refining.pool.inventoryStatus, 'For Refining');
-  assert.equal(refining.stock.every(item => item.status === 'For Refining'), true);
-  assert.match(refining.inventory, />For Processing</);
-  assert.match(refining.refining, /18K refining pool/);
-  assert.match(refining.refining, /2 pooled records/);
-  assert.doesNotMatch(refining.refining, /Seller A/);
-  assert.doesNotMatch(refining.refining, /Seller B/);
+  const held = api.setPoolClassification('POOL-REFINE', 'On Hold');
+  assert.equal(held.result, true);
+  assert.equal(held.pool.onHold, true);
+  assert.equal(held.stock.every(item => item.status === 'On Hold'), true);
+  assert.match(held.inventory, />On Hold</);
 
   const available = api.setPoolClassification('POOL-REFINE', 'Available');
   assert.equal(available.stock.every(item => item.status === 'Available'), true);
@@ -2248,20 +2245,20 @@ test('Apply category updates checked pools and singles together and rolls back a
   state.inventoryPools=[{id:'POOL-A',itemIds:['member'],originalWeight:2,originalCost:2000}];
   api.setState(state);
   api.applyInventorySelection([{kind:'all'}]);
-  let result=await api.applyCategory('For Refining',false);
+  let result=await api.applyCategory('On Hold',false);
   assert.ok(result.stock.every(item=>item.status==='Available'));
   assert.deepEqual(Array.from(result.selected),['POOL-A']);
-  result=await api.applyCategory('For Refining');
-  assert.ok(result.stock.every(item=>item.status==='For Refining'));
-  assert.equal(result.pools[0].inventoryStatus,'For Refining');
+  result=await api.applyCategory('On Hold');
+  assert.ok(result.stock.every(item=>item.status==='On Hold'));
+  assert.equal(result.pools[0].onHold,true);
   assert.deepEqual(Array.from(result.selected),[]);
   const poolSelection=api.applyInventorySelection([{kind:'pool',id:'POOL-A',checked:true}]);
   assert.equal(poolSelection.controls.inventory_apply_category.disabled,false);
   assert.doesNotMatch(api.renderInventory(), /id="inventory_apply_category"[^>]*disabled/);
-  result=await api.applyCategory('On Hold');
-  assert.equal(result.pools[0].onHold,true);
-  assert.equal(result.stock.find(item=>item.id==='member').status,'On Hold');
-  assert.equal(result.stock.find(item=>item.id==='single').status,'For Refining');
+  result=await api.applyCategory('Available');
+  assert.equal(result.pools[0].onHold,false);
+  assert.equal(result.stock.find(item=>item.id==='member').status,'Available');
+  assert.equal(result.stock.find(item=>item.id==='single').status,'On Hold');
 });
 
 test('visible return-entire-pool action preserves weights and costs and rolls back failed saves', async () => {
@@ -2278,7 +2275,7 @@ test('visible return-entire-pool action preserves weights and costs and rolls ba
 });
 
 
-test('inventory cost card shows open refining costs separately with metal filtering and no pool duplication',async()=>{
+test('inventory cost card omits refining totals while preserving current stock cost',async()=>{
   const api=await loadInventoryApi();const state=stateFixture();
   state.stock=[
     {id:'available',date:'2026-09-17',metal:'Gold',karat:'24K',status:'Available',currentWeight:1,cost:9000},
@@ -2295,15 +2292,15 @@ test('inventory cost card shows open refining costs separately with metal filter
   api.setState(state);
   let html=api.renderInventory();
   assert.match(html,/Total inventory cost<\/div><div class="value">PHP 9,000<\/div>/);
-  assert.match(html,/In Processing: <strong>PHP 47,000<\/strong>/);
+  assert.doesNotMatch(html,/In Processing|For Processing/);
   api.applyInventorySelection([],{metal:'Gold'});
-  html=api.renderInventory();assert.match(html,/In Processing: <strong>PHP 44,000<\/strong>/);
+  html=api.renderInventory();assert.doesNotMatch(html,/In Processing|For Processing/);
   api.applyInventorySelection([],{metal:'Platinum'});
-  assert.match(api.renderInventory(),/In Processing: <strong>PHP 0<\/strong>/);
+  assert.doesNotMatch(api.renderInventory(),/In Processing|For Processing/);
 });
 
 
-test('For Refining subtotal includes queued singles and pools before any batch is opened',async()=>{
+test('legacy refining classifications appear as available without refining controls',async()=>{
   const api=await loadInventoryApi();const state=stateFixture();
   state.stock=[
     {id:'queued',date:'2026-09-17',metal:'Gold',karat:'18K',status:'For Refining',currentWeight:1,cost:1000},
@@ -2314,10 +2311,11 @@ test('For Refining subtotal includes queued singles and pools before any batch i
   ];
   state.inventoryPools=[{id:'POOL-Q',itemIds:['pooled-a','pooled-b'],inventoryStatus:'For Refining',originalWeight:5,originalCost:5000}];
   state.refiningBatches=[];api.setState(state);
-  assert.match(api.renderInventory(),/In Processing: <strong>PHP 6,000<\/strong>/);
+  assert.doesNotMatch(api.renderInventory(),/In Processing|For Processing|Send to processing/);
+  assert.match(api.renderInventory(),/<span class="pill selling">Available<\/span>/);
   state.stock[0].refiningBatchId='R-Q';state.refiningBatches=[{id:'R-Q',date:'2026-09-17',metal:'Gold',status:'Open',itemIds:['queued']}];
   api.setState(state);
-  assert.match(api.renderInventory(),/In Processing: <strong>PHP 6,000<\/strong>/,'queued input entering a batch must be counted once');
+  assert.doesNotMatch(api.renderInventory(),/In Processing|For Processing|Send to processing/);
   api.setPoolClassification('POOL-Q','Available');
-  assert.match(api.renderInventory(),/In Processing: <strong>PHP 1,000<\/strong>/);
+  assert.doesNotMatch(api.renderInventory(),/In Processing|For Processing|Send to processing/);
 });

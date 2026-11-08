@@ -1058,7 +1058,6 @@ function render() {
         buying: ['Record a purchase', 'New buying transaction'],
         inventory: ['Current stock', 'Inventory'],
         liquidation: ['Outgoing stock assigned to buyers', 'Sales & releases'],
-        refining: ['Refining batches', 'Refining tracking'],
         retail: ['Walk-in resale', 'Limited retail sales'],
         customers: ['Sellers on file', 'Customer management'],
         users: ['Access control', 'User accounts'],
@@ -1067,7 +1066,7 @@ function render() {
     document.getElementById('pageTitle').textContent = titles[currentTab][1];
     const el = document.getElementById('content');
     const fns = { dashboard: renderDashboard, rates: renderRates, buying: renderBuying, inventory: renderInventory,
-        liquidation: renderLiquidation, refining: renderRefining, retail: renderRetail, customers: renderCustomers,
+        liquidation: renderLiquidation, retail: renderRetail, customers: renderCustomers,
         users: renderUsers };
     el.innerHTML = fns[currentTab]();
 }
@@ -1311,8 +1310,8 @@ function renderDashboard() {
   `;
 }
 function statusPill(status) {
-    const map = { 'Available': 'selling', 'For Liquidation': 'liquidation', 'For Refining': 'refining', 'On Hold': 'hold', 'Liquidated': 'liquidated', 'Refined': 'liquidated', 'Sold': 'sold' };
-    const label = { 'For Liquidation': 'For Sale / Release', 'For Refining': 'For Processing', 'Liquidated': 'Released', 'Refined': 'Processed' }[status] || status;
+    const map = { 'Available': 'selling', 'For Liquidation': 'liquidation', 'For Refining': 'selling', 'On Hold': 'hold', 'Liquidated': 'liquidated', 'Refined': 'liquidated', 'Sold': 'sold' };
+    const label = { 'For Liquidation': 'For Sale / Release', 'For Refining': 'Available', 'Liquidated': 'Released', 'Refined': 'Archived' }[status] || status;
     return `<span class="pill ${map[status] || ''}">${label}</span>`;
 }
 function tableOrEmpty(rows, rowFn, headers, emptyMsg) {
@@ -3628,7 +3627,7 @@ function openInventoryFilterModal() {
       <div class="field"><label for="modal_inv_metal">Material</label><select id="modal_inv_metal" onchange="updateInventoryFilterModalKarats()">${['All', 'Scrapboard'].map(metal => `<option value="${metal}" ${invFilter.metal === metal ? 'selected' : ''}>${metal === 'All' ? 'All scrapboard' : metal}</option>`).join('')}</select></div>
       <div class="field"><label for="modal_inv_karat">Classification</label><select id="modal_inv_karat"><option value="All">All classifications</option>${groups.map(group => `<optgroup label="${esc(group)}">${grades.filter(row => row.metal === group).map(row => { const value = invFilter.metal === 'All' ? `${row.metal}::${row.karat}` : row.karat, selected = invFilter.metal === 'All' ? invFilter.karat === row.karat && invFilter.metal === row.metal : invFilter.karat === row.karat; return `<option value="${esc(value)}" ${selected ? 'selected' : ''}>${esc(gradeLabel(row.metal, row.karat))}</option>`; }).join('')}</optgroup>`).join('')}</select></div>
       <div class="field"><label for="modal_inv_type">Material type</label><select id="modal_inv_type">${['All', 'Scrapboard'].map(type => `<option value="${type}" ${invFilter.type === type ? 'selected' : ''}>${type === 'All' ? 'All material types' : type}</option>`).join('')}</select></div>
-      <div class="field"><label for="modal_inv_status">Status</label><select id="modal_inv_status">${['All', 'Available', 'For Refining', 'On Hold'].map(status => `<option value="${status}" ${invFilter.status === status ? 'selected' : ''}>${status === 'All' ? 'All statuses' : status === 'For Refining' ? 'For Processing' : status}</option>`).join('')}</select></div>
+      <div class="field"><label for="modal_inv_status">Status</label><select id="modal_inv_status">${['All', 'Available', 'On Hold'].map(status => `<option value="${status}" ${invFilter.status === status ? 'selected' : ''}>${status === 'All' ? 'All statuses' : status}</option>`).join('')}</select></div>
     </div>
     <div class="inventory-filter-help"><strong>Tip:</strong> Choose “All” to include every current record from ${inventoryDateLabel()}.</div>
     <div class="form-actions inventory-filter-modal-actions"><button class="btn secondary" onclick="showAllInventoryForSelectedDate()">Show all stock</button><button class="btn" onclick="applyInventoryDateFilters()">Apply filters</button></div>
@@ -3798,7 +3797,7 @@ async function categorizeCheckedInventory() {
         toast('Select at least one inventory record or pool');
         return;
     }
-    if (!['Available', 'For Refining', 'On Hold'].includes(status)) {
+    if (!['Available', 'On Hold'].includes(status)) {
         toast('Choose a valid category');
         return;
     }
@@ -3857,7 +3856,7 @@ function moveCheckedInventoryToLiquidation() {
         return;
     }
     if (checked.some(item => !movableInventory(item))) {
-        toast('On Hold records must be categorized as Available or For Refining before liquidation');
+        toast('On Hold records must be categorized as Available before sale or release');
         return;
     }
     const poolRows = pools.map(pool => inventoryPoolReviewRow(pool)).filter(Boolean);
@@ -5059,11 +5058,6 @@ function renderInventory() {
         : breakdown.map(entry => `<tr><td><span class="metal-tag ${entry.metal.toLowerCase()}">${entry.metal}</span></td><td>${esc(gradeLabel(entry.metal, entry.karat))}</td><td class="num">${entry.count}</td><td class="num">${fmtWeight(entry.weight)}</td><td class="num">${fmtMoney(entry.cost)}</td></tr>`).join('');
     const breakdownWeight = breakdownSource.reduce((sum, item) => sum + Number(item.currentWeight), 0);
     const breakdownCost = breakdownSource.reduce((sum, item) => sum + Number(item.cost), 0);
-    const inRefiningIds = new Set(db.refiningBatches.filter(batch => batch.status === 'Open').flatMap(batch => batch.itemIds || []));
-    const refiningPoolIds = new Set((db.inventoryPools || []).filter(pool => poolInventoryClassification(pool) === 'For Refining').map(pool => pool.id));
-    const inRefiningCost = db.stock.filter(item => Number(item.currentWeight) > 0 &&
-        (inRefiningIds.has(item.id) || (activeInventoryRecord(item) && (item.inventoryPoolId ? refiningPoolIds.has(item.inventoryPoolId) : item.status === 'For Refining'))) &&
-        (invFilter.metal === 'All' || item.metal === invFilter.metal)).reduce((sum, item) => sum + Number(item.cost || 0), 0);
     const selectedGradeCounts = new Map();
     selectedRecords.forEach(item => { const key = `${item.metal} ${gradeLabel(item.metal, item.karat)}`; selectedGradeCounts.set(key, (selectedGradeCounts.get(key) || 0) + 1); });
     return `
@@ -5073,7 +5067,7 @@ function renderInventory() {
     <div class="stat-row inventory-overview-stats">
       <div class="stat"><div class="label">Current items</div><div class="value">${breakdownSource.length}</div><div class="sub">active records across all dates</div></div>
       <div class="stat"><div class="label">Total weight</div><div class="value">${fmtWeight(breakdownWeight)}</div><div class="sub">remaining current stock</div></div>
-      <div class="stat"><div class="label">Total inventory cost</div><div class="value">${fmtMoney(breakdownCost)}</div><div class="sub">combined carrying cost</div><div class="sub inventory-refining-subtotal" title="Current cost of stock marked For Processing">In Processing: <strong>${fmtMoney(inRefiningCost)}</strong></div></div>
+      <div class="stat"><div class="label">Total inventory cost</div><div class="value">${fmtMoney(breakdownCost)}</div><div class="sub">combined carrying cost</div></div>
       <div class="stat"><div class="label">Classification groups</div><div class="value">${breakdown.length}</div><div class="sub">shown in the breakdown below</div></div>
     </div>
     <div class="inventory-breakdown-card">
@@ -5081,7 +5075,7 @@ function renderInventory() {
       ${breakdown.length ? `<div class="table-wrap inventory-breakdown"><table><thead><tr><th>Material</th><th>Classification</th><th class="num-head">Items</th><th class="num-head">Total weight</th><th class="num-head">Total cost</th></tr></thead><tbody>${breakdownRows}</tbody></table></div><div class="inventory-breakdown-total"><span>${invFilter.metal === 'All' ? 'All current stock' : 'Scrapboard total'} · ${breakdownSource.length} item${breakdownSource.length === 1 ? '' : 's'} · ${fmtWeight(breakdownWeight)}</span><strong>${fmtMoney(breakdownCost)}</strong></div>`
         : `<div class="empty-note">No active ${invFilter.metal === 'All' ? 'inventory' : esc(invFilter.metal) + ' inventory'} remains.</div>`}
     </div>
-    <p class="form-note inventory-history-note">Items prepared for sale or release are shown in Sales &amp; Releases. Released, processed, and sold items remain in reports and transaction history.</p>
+    <p class="form-note inventory-history-note">Items prepared for sale or release are shown in Sales &amp; Releases. Released and sold items remain in reports and transaction history.</p>
   </section>
 
   <section class="block">
@@ -5098,7 +5092,7 @@ function renderInventory() {
     <h2 class="block-title">${inventorySelectedDate === 'All' ? 'All purchase dates' : `${new Date(selectedDay.date + 'T00:00:00').toLocaleDateString('en-PH', { weekday: 'long' })}, ${fmtDate(selectedDay.date)}`}</h2>
     <div class="stat-row">
       <div class="stat"><div class="label">Current scrapboard records</div><div class="value">${displayStock.length}</div><div class="sub">grouped inventory is counted as one item</div></div>
-      <div class="stat"><div class="label">Available scrapboard lines</div><div class="value">${displayAvailable.length}</div><div class="sub">ready for grouping, sale, or processing</div></div>
+      <div class="stat"><div class="label">Available scrapboard lines</div><div class="value">${displayAvailable.length}</div><div class="sub">ready for grouping, sale, or release</div></div>
       <div class="stat"><div class="label">Available weight</div><div class="value">${fmtWeight(displayAvailable.reduce((sum, item) => sum + Number(item.currentWeight), 0))}</div><div class="sub">remaining from ${inventorySelectedDate === 'All' ? 'all purchases' : "this date's purchases"}</div></div>
       <div class="stat"><div class="label">Remaining cost</div><div class="value">${fmtMoney(displayStock.reduce((sum, item) => sum + Number(item.cost), 0))}</div><div class="sub">carrying cost ${inventorySelectedDate === 'All' ? 'across all dates' : 'for this purchase date'}</div></div>
     </div>
@@ -5106,7 +5100,7 @@ function renderInventory() {
 
   <section class="block" id="inventory_stock_list">
     <div class="inventory-stock-head"><div><h2 class="block-title">Scrapboard records</h2><p class="form-note">${inventorySearch ? `${rows.length} matching record${rows.length === 1 ? '' : 's'}` : activeFilterLabels.length ? `Showing: ${activeFilterLabels.map(esc).join(' · ')}` : 'Showing all records'} across ${inventoryDateLabel()}.</p></div><div class="inventory-stock-tools"><div class="field inventory-stock-search"><label for="inventory_stock_search">Search scrapboard records</label><input id="inventory_stock_search" type="search" autocomplete="off" value="${esc(inventorySearch)}" placeholder="Seller, date, classification, or status" oninput="updateInventorySearch(this.value)"></div><div class="field inventory-stock-sort"><label for="inventory_stock_sort">Buying date</label><select id="inventory_stock_sort" onchange="updateInventorySort(this.value)"><option value="newest" ${inventorySort === 'newest' ? 'selected' : ''}>Newest to oldest</option><option value="oldest" ${inventorySort === 'oldest' ? 'selected' : ''}>Oldest to newest</option></select></div><button class="btn secondary small" onclick="openInventoryFilterModal()">Change filters</button></div></div>
-    ${isAdmin() ? `<div class="inventory-action-panel"><div class="inventory-action-status"><strong>${percentagePool.length} eligible ${inventorySelectedDate === 'All' ? 'across all dates' : 'on this date'}</strong><span><span id="inventory_liq_count">${selectedMoveCount}</span> scrapboard item${selectedMoveCount === 1 ? '' : 's'} selected<span id="inventory_selected_pool_count">${selectedPoolCount ? ` · ${selectedPoolCount} group${selectedPoolCount === 1 ? '' : 's'} selected` : ''}</span>${percentagePool.length ? '' : ' · change the filters'}</span>${selectedGradeCounts.size ? `<div class="inventory-selection-chips">${Array.from(selectedGradeCounts.entries()).map(([grade, count]) => `<span>${esc(grade)} · ${count}</span>`).join('')}</div>` : ''}</div><div class="inventory-action-buttons"><div class="inventory-selection-actions" role="group" aria-label="Select scrapboard inventory"><button class="btn secondary small" onclick="selectAllVisibleInventory()">Select all shown</button><button class="btn secondary small" id="inventory_clear_selected" onclick="clearInventorySelection()" ${selectedMoveCount || selectedPoolCount ? '' : 'disabled'}>Clear</button></div><div class="inventory-bulk-category" role="group" aria-label="Change status"><select id="inventory_bulk_status" aria-label="Status for selected scrapboard" onchange="inventoryBulkStatus=this.value">${['Available', 'For Refining', 'On Hold'].map(status => `<option value="${status}" ${inventoryBulkStatus === status ? 'selected' : ''}>${status === 'For Refining' ? 'For Processing' : status}</option>`).join('')}</select><button class="btn secondary small" id="inventory_apply_category" onclick="categorizeCheckedInventory()" ${selectedMoveCount || selectedPoolCount ? '' : 'disabled'}>Apply status</button></div><div class="inventory-operation-actions" role="group" aria-label="Scrapboard actions"><button class="btn small" id="inventory_pool_selected" onclick="openManualInventoryPoolModal()" ${canPoolSelected ? '' : 'disabled'}>Group selected</button><button class="btn secondary small" id="inventory_move_selected" onclick="moveCheckedInventoryToLiquidation()" ${canMoveSelected ? '' : 'disabled'}>Prepare for sale / release</button><button class="btn secondary small" onclick="openCombineLiquidationDateSelection()" ${hasMovableStock ? '' : 'disabled'}>Combine buying dates</button><button class="btn secondary small" data-inventory-selection-required onclick="prepareInventoryForRefining()" ${selectedMoveCount ? '' : 'disabled'}>Send to processing</button><button class="btn secondary small" id="inventory_merge_pools" onclick="openInventoryPoolMergeModal()" ${canMergeSelectedPools ? '' : 'disabled'}>Merge selected groups</button></div></div></div>` : ''}
+    ${isAdmin() ? `<div class="inventory-action-panel"><div class="inventory-action-status"><strong>${percentagePool.length} eligible ${inventorySelectedDate === 'All' ? 'across all dates' : 'on this date'}</strong><span><span id="inventory_liq_count">${selectedMoveCount}</span> scrapboard item${selectedMoveCount === 1 ? '' : 's'} selected<span id="inventory_selected_pool_count">${selectedPoolCount ? ` · ${selectedPoolCount} group${selectedPoolCount === 1 ? '' : 's'} selected` : ''}</span>${percentagePool.length ? '' : ' · change the filters'}</span>${selectedGradeCounts.size ? `<div class="inventory-selection-chips">${Array.from(selectedGradeCounts.entries()).map(([grade, count]) => `<span>${esc(grade)} · ${count}</span>`).join('')}</div>` : ''}</div><div class="inventory-action-buttons"><div class="inventory-selection-actions" role="group" aria-label="Select scrapboard inventory"><button class="btn secondary small" onclick="selectAllVisibleInventory()">Select all shown</button><button class="btn secondary small" id="inventory_clear_selected" onclick="clearInventorySelection()" ${selectedMoveCount || selectedPoolCount ? '' : 'disabled'}>Clear</button></div><div class="inventory-bulk-category" role="group" aria-label="Change status"><select id="inventory_bulk_status" aria-label="Status for selected scrapboard" onchange="inventoryBulkStatus=this.value">${['Available', 'On Hold'].map(status => `<option value="${status}" ${inventoryBulkStatus === status ? 'selected' : ''}>${status}</option>`).join('')}</select><button class="btn secondary small" id="inventory_apply_category" onclick="categorizeCheckedInventory()" ${selectedMoveCount || selectedPoolCount ? '' : 'disabled'}>Apply status</button></div><div class="inventory-operation-actions" role="group" aria-label="Scrapboard actions"><button class="btn small" id="inventory_pool_selected" onclick="openManualInventoryPoolModal()" ${canPoolSelected ? '' : 'disabled'}>Group selected</button><button class="btn secondary small" id="inventory_move_selected" onclick="moveCheckedInventoryToLiquidation()" ${canMoveSelected ? '' : 'disabled'}>Prepare for sale / release</button><button class="btn secondary small" onclick="openCombineLiquidationDateSelection()" ${hasMovableStock ? '' : 'disabled'}>Combine buying dates</button><button class="btn secondary small" id="inventory_merge_pools" onclick="openInventoryPoolMergeModal()" ${canMergeSelectedPools ? '' : 'disabled'}>Merge selected groups</button></div></div></div>` : ''}
     ${tableOrEmpty(rows, s => `<tr>${isAdmin() ? `<td>${s.isInventoryPool ? `<input type="checkbox" data-inventory-pool-id="${s.inventoryPoolId}" aria-label="Select pooled inventory to merge or add inventory" onchange="toggleInventoryPoolSelection('${s.inventoryPoolId}',this.checked)" ${inventoryPoolRowSelection.has(s.inventoryPoolId) ? 'checked' : ''}>` : `<input type="checkbox" data-inventory-move-id="${s.id}" aria-label="Select ${esc(s.metal)} ${esc(s.karat)} from ${esc(s.customerName)}" onchange="toggleInventoryForLiquidation('${s.id}',this.checked)" ${inventoryMoveSelection.has(s.id) ? 'checked' : ''} ${categorizableInventory(s) ? '' : 'disabled'}>`}</td>` : ''}<td>${fmtDate(s.date)}</td><td>${s.isInventoryPool ? '' : esc(s.customerName)}</td><td><span class="metal-tag ${s.metal.toLowerCase()}">${s.metal}</span> ${esc(s.karat)}</td>
       <td>${esc(s.itemType)}</td><td class="num">${fmtWeight(s.currentWeight)}</td><td class="num">${fmtMoney(s.cost)}</td><td>${statusPill(s.status)}${s.isInventoryPool ? `<br><span class="form-note">${esc(s.inventoryPoolId)}</span>` : ''}</td><td>${s.isInventoryPool ? esc(s.remarks || '') : esc(s.remarks || '—')}</td>${isAdmin() ? `<td><div class="form-actions">${s.isInventoryPool ? `<button class="btn small" onclick="openPoolLiquidationModal('${s.inventoryPoolId}')">Liquidate</button><button class="btn secondary small" onclick="openInventoryPoolEdit('${s.inventoryPoolId}')">Edit</button>` : `${movableInventory(s) ? `<button class="btn secondary small" onclick="liquidateInventoryItem('${s.id}')">Liquidate</button>` : ''}${adminEditButton('Inventory', s.id)}`}</div></td>` : ''}</tr>`, [...(isAdmin() ? ['Select'] : []), 'Date', 'Seller', 'Classification', 'Material type', 'Current weight', 'Cost', 'Status', 'Remarks', ...(isAdmin() ? ['Actions'] : [])], `No scrapboard stock matches this filter ${inventorySelectedDate === 'All' ? 'across all buying dates' : `on ${fmtDate(selectedDay.date)}`}.`)}
   </section>
@@ -5133,7 +5127,7 @@ function openInventoryPoolEdit(id) {
     const itemType = sharedPoolItemValue(snapshot.items, 'itemType') || 'Mixed';
     openAdminEditModal('Edit pooled inventory', `<div class="form-grid">
     <div class="field"><label>Date</label><input id="edit_pool_date" type="date" value="${esc(date)}"></div>
-    <div class="field"><label>Classification</label><select id="edit_pool_status">${['Available', 'For Refining', 'On Hold'].map(status => `<option ${poolInventoryClassification(pool, snapshot) === status ? 'selected' : ''}>${status}</option>`).join('')}</select></div>
+    <div class="field"><label>Classification</label><select id="edit_pool_status">${['Available', 'On Hold'].map(status => `<option ${poolInventoryClassification(pool, snapshot) === status ? 'selected' : ''}>${status}</option>`).join('')}</select></div>
     <div class="field"><label for="edit_pool_karat">Karat / purity</label><select id="edit_pool_karat" onchange="togglePoolEditCustomPurity()" ${composition.metal === 'Mixed' ? 'disabled' : ''}>${composition.metal === 'Mixed' ? '<option value="Mixed" selected>Mixed metals / purities</option>' : `${mixedPurities ? '<option value="Mixed" selected>Mixed purities</option>' : ''}${gradeKeys.filter(key => (GRADES[composition.metal] || []).includes(key) || customPurityFromKey(key) === null).map(key => `<option value="${esc(key)}" ${!customSelected && key === composition.karat ? 'selected' : ''}>${esc(gradeLabel(composition.metal, key))}</option>`).join('')}<option value="__custom__" ${customSelected ? 'selected' : ''}>Custom purity (%)</option>`}</select></div>
     ${composition.metal === 'Mixed' ? '' : `<div class="field ${customSelected ? '' : 'is-hidden'}" id="edit_pool_custom_purity_field"><label for="edit_pool_custom_purity">Custom ${esc(composition.metal)} purity (%)</label><div class="custom-purity-input"><input id="edit_pool_custom_purity" type="number" min="0.01" max="100" step="0.01" value="${customSelected ? esc(customPurityFromKey(composition.karat)) : ''}" placeholder="Example: 38.5"><span>%</span></div><span class="form-note">Applies to the current purity of all items in this pool.</span></div>`}
     <div class="field"><label>Current weight (g)</label><input id="edit_pool_weight" type="number" min="0.01" step="0.01" value="${snapshot.weight}"><span class="hint">May be corrected upward or downward. Original purchase weights and costs stay unchanged.</span></div>
@@ -7148,7 +7142,7 @@ function updateRoleDescription() {
     const description = document.getElementById('usr_role_description');
     if (description)
         description.textContent = val('usr_role') === 'admin'
-            ? 'Full access to pricing, purchases, inventory, liquidation, refining, retail sales, reports, and user accounts.'
+            ? 'Full access to pricing, purchases, inventory, sales and releases, reports, and user accounts.'
             : 'Can view rates, override grades, record purchases, view inventory, and manage customers.';
 }
 async function createUserAccount() {
@@ -7467,7 +7461,7 @@ function renderReports() {
   </section></div>`;
     };
     const renderReadinessReport = () => `<div id="dashboard_report_content" class="dashboard-report-content"><section class="block">
-    <div class="batch-head"><div><h2 class="block-title">Sale &amp; processing readiness</h2><p class="form-note">On-hand scrapboard stock ready for a sales batch or processing.</p></div><button class="btn small" onclick="goTab('inventory')">Open inventory</button></div>
+    <div class="batch-head"><div><h2 class="block-title">Sale &amp; release readiness</h2><p class="form-note">On-hand scrapboard stock ready for a sales or release batch.</p></div><button class="btn small" onclick="goTab('inventory')">Open inventory</button></div>
     <div class="purchase-history-filter-card">
       <div class="purchase-history-filter-top"><div><strong>Buying date</strong><span>Defaults to the latest two weeks so the list stays manageable.</span></div><div class="purchase-history-presets"><button class="btn secondary small" onclick="setReadinessDatePreset('today')">Today</button><button class="btn secondary small" onclick="setReadinessDatePreset('two-weeks')">Last 2 weeks</button><button class="btn secondary small" onclick="setReadinessDatePreset('all')" ${readinessFrom || readinessTo ? '' : 'disabled'}>All dates</button></div></div>
       <div class="purchase-history-date-row"><div class="field"><label for="readiness_from">From</label><input id="readiness_from" type="date" value="${esc(readinessFrom)}"></div><div class="field"><label for="readiness_to">To</label><input id="readiness_to" type="date" value="${esc(readinessTo)}"></div><button class="btn" onclick="applyReadinessDates()">Apply dates</button></div>
@@ -7475,7 +7469,7 @@ function renderReports() {
     </div>
     ${dashboardReportSearch('Search date, classification, material type, or status', readyStock.length)}
     ${tableOrEmpty(readyStock, s => `<tr data-dashboard-search="${dashboardSearchValue(s.date, fmtDate(s.date), s.metal, s.karat, s.itemType, s.status, s.customerName)}"><td>${fmtDate(s.date)}</td><td><span class="metal-tag ${s.metal.toLowerCase()}">${s.metal}</span> ${esc(s.karat)}</td><td>${esc(s.itemType)}</td>
-      <td class="num">${fmtWeight(s.currentWeight)}</td><td>${statusPill(s.status)}</td></tr>`, ['Date', 'Classification', 'Material type', 'Weight available', 'Status'], 'Nothing is currently ready for sale or processing.')}
+      <td class="num">${fmtWeight(s.currentWeight)}</td><td>${statusPill(s.status)}</td></tr>`, ['Date', 'Classification', 'Material type', 'Weight available', 'Status'], 'Nothing is currently ready for sale or release.')}
   </section></div>`;
     const selectedReport = dashboardReportPanel === 'purchases' ? renderPurchaseReport()
         : dashboardReportPanel === 'liquidations' ? `<div id="dashboard_report_content" class="dashboard-report-content">${renderLiquidationHistory()}</div>`
@@ -7493,7 +7487,6 @@ function renderReports() {
     <details><summary>Export ledger data</summary><div class="stat-row">
       <div class="stat"><div class="label">Inventory ledger</div><button class="btn small" style="margin-top:8px;" onclick="exportStock()">Download CSV</button></div>
       <div class="stat"><div class="label">Sales &amp; releases</div><button class="btn small" style="margin-top:8px;" onclick="exportLiquidations()">Download CSV</button></div>
-      <div class="stat"><div class="label">Processing history</div><button class="btn small" style="margin-top:8px;" onclick="exportRefining()">Download CSV</button></div>
       <div class="stat"><div class="label">Direct sales</div><button class="btn small" style="margin-top:8px;" onclick="exportRetail()">Download CSV</button></div>
       <div class="stat"><div class="label">Sellers</div><button class="btn small" style="margin-top:8px;" onclick="exportCustomers()">Download CSV</button></div>
       <div class="stat"><div class="label">Daily rate sheet</div><button class="btn small" style="margin-top:8px;" onclick="exportRates()">Download CSV</button></div>
