@@ -39,6 +39,7 @@ async function loadCustomItemApi() {
       categoryEditor: key => scrapboardCategoryEditorMarkup(key),
       itemEditor: key => scrapboardItemEditorMarkup(key),
       setCatalogExpanded: value => rememberScrapboardCatalogExpanded(value),
+      setRateSort: value => { scrapboardRateSort = value; },
       lookup: key => ({ ...scrapboardItem(key) }),
       label: key => gradeLabel('Scrapboard', key),
       activeRate: key => ({ ...activeRate('Scrapboard', key) }),
@@ -258,13 +259,30 @@ test('Daily Rates groups IC chips under one category with subcategories', async 
   api.setAdmin();
 
   const html = api.renderRates();
-  assert.match(html, /<h3>IC chips<\/h3>/);
+  assert.match(html, /<h3>IC CHIP<\/h3>/);
   assert.match(html, /<h4>A series<\/h4>/);
   assert.match(html, /<h4>NC series<\/h4>/);
   assert.match(html, /<h4>Phone processors<\/h4>/);
   assert.match(html, /<h4>Keypad codes<\/h4>/);
-  assert.doesNotMatch(html, /<h3>IC chips ·/);
+  assert.doesNotMatch(html, /<h3>IC chips ·/i);
   assert.match(html, /<h3>Whole boards<\/h3>/);
+});
+
+test('custom EMCP and EMMC categories combine under the IC CHIP parent', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  await api.addCategory('IC CHIP • EMCP');
+  await api.addCategory('IC CHIP • EMMC');
+  await api.addItem('IC CHIP • EMCP', 'EMCP sample', 'kg', 500);
+  await api.addItem('IC CHIP • EMMC', 'EMMC sample', 'kg', 400);
+
+  const html = api.renderRates();
+  assert.match(html, /<h3>IC CHIP<\/h3>/);
+  assert.match(html, /<h4>EMCP<\/h4>/);
+  assert.match(html, /<h4>EMMC<\/h4>/);
+  assert.match(html, /<optgroup label="IC CHIP">/);
+  assert.match(html, /<option value="IC CHIP • EMCP"[^>]*>EMCP<\/option>/);
+  assert.match(html, /<option value="IC CHIP • EMMC"[^>]*>EMMC<\/option>/);
 });
 
 test('downloadable scrapboard overview uses the active catalog groups and rates', async () => {
@@ -287,7 +305,7 @@ test('downloadable scrapboard overview uses an HD canvas and larger five-column 
   assert.match(generator, /cardHeight = 128/);
 });
 
-test('category editor exposes rename deactivate and conditional permanent delete actions', async () => {
+test('category editor exposes rename remove restore and conditional permanent delete actions', async () => {
   const api = await loadCustomItemApi();
   api.setAdmin();
   await api.addCategory('Empty Custom');
@@ -295,13 +313,32 @@ test('category editor exposes rename deactivate and conditional permanent delete
   const builtIn = api.categoryEditor('Whole boards');
   assert.match(builtIn, /Edit category/);
   assert.match(builtIn, /value="Whole boards"/);
-  assert.match(builtIn, />Deactivate</);
+  assert.match(builtIn, />Remove category</);
+  assert.match(builtIn, /confirmRemoveScrapboardCategory/);
   assert.doesNotMatch(builtIn, /Delete permanently/);
 
   const custom = api.categoryEditor('Empty Custom');
   assert.match(custom, /Delete permanently/);
   await api.editCategory('Empty Custom', { label: 'Empty Custom', active: false });
-  assert.match(api.categoryEditor('Empty Custom'), />Activate</);
+  assert.match(api.categoryEditor('Empty Custom'), />Restore category</);
+});
+
+test('Daily Rates can arrange items from highest or lowest price', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+
+  const defaultHtml = api.renderRates();
+  assert.match(defaultHtml, /Arrange by price/);
+  assert.match(defaultHtml, /Highest to lowest/);
+  assert.match(defaultHtml, /Lowest to highest/);
+
+  api.setRateSort('high');
+  const highHtml = api.renderRates();
+  assert.ok(highHtml.indexOf('id="scrap_rate_IPHONE_XR_UP"') < highHtml.indexOf('id="scrap_rate_AMINUS8G"'));
+
+  api.setRateSort('low');
+  const lowHtml = api.renderRates();
+  assert.ok(lowHtml.indexOf('id="scrap_rate_AMINUS8G"') < lowHtml.indexOf('id="scrap_rate_IPHONE_XR_UP"'));
 });
 
 test('item editor exposes label category unit active state and safe delete rules', async () => {
