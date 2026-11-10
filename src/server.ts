@@ -76,24 +76,24 @@ const DEFAULT_SCRAPBOARD_RATES: Record<string, number> = {
   CAMERA_A:4800,CAMERA_B:1000,LCD_PHONE:30,CP_BATTERY:70,LAPTOP_BATTERY:50,KEYPAD_BUO:15,NOKIA_ORIG_BUO:80
 };
 const DEFAULT_SCRAPBOARD_ITEMS: Array<{key:string;label:string;group:string;unit:'kg'|'pc'}> = [
-  ...['A6','A5','A4','A3','A2','A1'].map(key=>({key,label:key,group:'IC chips · A series',unit:'kg' as const})),
-  ...['NC512','NC256','NC128','NC64','NC32','NC16','NC8'].map(key=>({key,label:key.replace('NC','NC '),group:'IC chips · NC series',unit:'kg' as const})),
-  {key:'AMINUS8G',label:'A Minus (8g)',group:'IC chips · Phone processors',unit:'pc'},
-  {key:'6580_7731E_A1',label:'6580 / 7731E A1',group:'IC chips · Phone processors',unit:'pc'},
-  {key:'6580B',label:'6580 B',group:'IC chips · Phone processors',unit:'pc'},
-  {key:'6580C',label:'6580 C',group:'IC chips · Phone processors',unit:'pc'},
-  {key:'7731E_BC',label:'7731E B/C',group:'IC chips · Phone processors',unit:'pc'},
-  {key:'IPHONE_XR_UP',label:'iPhone XR pataas',group:'IC chips · Phone processors',unit:'pc'},
-  {key:'IPHONE_TAB_BOARD',label:'iPhone / iPad board',group:'IC chips · Phone processors',unit:'pc'},
-  {key:'IPHONE_BOARD',label:'iPhone board',group:'IC chips · Phone processors',unit:'pc'},
+  ...['A6','A5','A4','A3','A2','A1'].map(key=>({key,label:key,group:'IC Chips · Coded',unit:'kg' as const})),
+  ...['NC512','NC256','NC128','NC64','NC32','NC16','NC8'].map(key=>({key,label:key.replace('NC','NC '),group:'IC Chips · Non-Coded',unit:'kg' as const})),
+  {key:'AMINUS8G',label:'A Minus (8g)',group:'IC Chips · Other',unit:'pc'},
+  {key:'6580_7731E_A1',label:'6580 / 7731E A1',group:'IC Chips · Other',unit:'pc'},
+  {key:'6580B',label:'6580 B',group:'IC Chips · Other',unit:'pc'},
+  {key:'6580C',label:'6580 C',group:'IC Chips · Other',unit:'pc'},
+  {key:'7731E_BC',label:'7731E B/C',group:'IC Chips · Other',unit:'pc'},
+  {key:'IPHONE_XR_UP',label:'iPhone XR pataas',group:'IC Chips · Other',unit:'pc'},
+  {key:'IPHONE_TAB_BOARD',label:'iPhone / iPad board',group:'IC Chips · Other',unit:'pc'},
+  {key:'IPHONE_BOARD',label:'iPhone board',group:'IC Chips · Other',unit:'pc'},
   {key:'TABLET',label:'Tablet',group:'Whole boards',unit:'kg'}, {key:'CHINA',label:'China',group:'Whole boards',unit:'kg'},
   {key:'SAMSUNG',label:'Samsung',group:'Whole boards',unit:'kg'}, {key:'SAMSUNG_TAB',label:'Samsung tablet',group:'Whole boards',unit:'kg'},
   {key:'NOKIA_ORIG',label:'Nokia original',group:'Whole boards',unit:'kg'}, {key:'ANDROID_B',label:'Android B',group:'Whole boards',unit:'pc'},
   {key:'ANDROID_C',label:'Android C',group:'Whole boards',unit:'pc'},
-  ...['6531E','6531','6261','6533','6500'].map(key=>({key,label:key,group:'IC chips · Keypad codes',unit:'pc' as const})),
-  {key:'RDA8851_88X9',label:'RDA 8851 / 88X9',group:'IC chips · Keypad codes',unit:'pc'},
-  {key:'9863A_9832A',label:'9863A / 9832A',group:'IC chips · Keypad codes',unit:'pc'},
-  {key:'27AD',label:'27AD',group:'IC chips · Keypad codes',unit:'pc'}, {key:'EXYNOS',label:'Exynos',group:'IC chips · Keypad codes',unit:'pc'},
+  ...['6531E','6531','6261','6533','6500'].map(key=>({key,label:key,group:'IC Chips · Other',unit:'pc' as const})),
+  {key:'RDA8851_88X9',label:'RDA 8851 / 88X9',group:'IC Chips · Other',unit:'pc'},
+  {key:'9863A_9832A',label:'9863A / 9832A',group:'IC Chips · Other',unit:'pc'},
+  {key:'27AD',label:'27AD',group:'IC Chips · Other',unit:'pc'}, {key:'EXYNOS',label:'Exynos',group:'IC Chips · Other',unit:'pc'},
   {key:'CAMERA_A',label:'Camera A',group:'Parts & batteries',unit:'kg'}, {key:'CAMERA_B',label:'Camera B',group:'Parts & batteries',unit:'kg'},
   {key:'LCD_PHONE',label:'LCD phone',group:'Parts & batteries',unit:'kg'}, {key:'CP_BATTERY',label:'Cellphone battery',group:'Parts & batteries',unit:'kg'},
   {key:'LAPTOP_BATTERY',label:'Laptop battery',group:'Parts & batteries',unit:'kg'},
@@ -175,15 +175,11 @@ export function validateCatalogManagementCandidate(state:Record<string,any>,cand
   const allItems=[...DEFAULT_SCRAPBOARD_ITEMS,...customItems.map(item=>({key:String(item.key),label:normalizedCatalogLabel(item.label),group:String(item.group),unit:String(item.unit) as 'kg'|'pc'}))];
   const itemKeys=new Set(allItems.map(item=>item.key));
   if(Object.keys(itemSettings).some(key=>!itemKeys.has(key)))throw new Error('Invalid item setting');
-  const itemLabelsByCategory=new Set<string>();
   for(const item of allItems){
     const setting=itemSettings[item.key]||{},label=normalizedCatalogLabel(setting.label)||item.label,group=String(setting.group||item.group),unit=String(setting.unit||item.unit);
     if(!categoryKeys.includes(group))throw new Error('Invalid item category');
     if(!['kg','pc'].includes(unit))throw new Error('Invalid item unit');
     if(setting.active!==undefined&&typeof setting.active!=='boolean')throw new Error('Invalid item active state');
-    const duplicateKey=`${group.toLowerCase()}\u0000${label.toLowerCase()}`;
-    if(itemLabelsByCategory.has(duplicateKey))throw new Error('Duplicate item label');
-    itemLabelsByCategory.add(duplicateKey);
   }
   const rates=(candidate as Record<string,any>).scrapboardRates;
   if(!rates||typeof rates!=='object'||Array.isArray(rates))throw new Error('Invalid scrapboard rates');

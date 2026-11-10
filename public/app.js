@@ -442,27 +442,27 @@ const PLATINUM_GRADES = [
     { key: '850', label: '850', mult: 850 / 999 },
 ];
 const SCRAPBOARD_ITEMS = [
-    { key: 'A6', label: 'A6', rate: 1500, unit: 'kg', group: 'IC Chips · EMCP' },
-    { key: 'A5', label: 'A5', rate: 1400, unit: 'kg', group: 'IC Chips · EMCP' },
-    { key: 'A4', label: 'A4', rate: 1000, unit: 'kg', group: 'IC Chips · EMCP' },
-    { key: 'A3', label: 'A3', rate: 700, unit: 'kg', group: 'IC Chips · EMCP' },
-    { key: 'A2', label: 'A2', rate: 300, unit: 'kg', group: 'IC Chips · EMCP' },
-    { key: 'A1', label: 'A1', rate: 140, unit: 'kg', group: 'IC Chips · EMCP' },
-    { key: 'NC512', label: 'NC 512', rate: 1370, unit: 'kg', group: 'IC Chips · EMMC' },
-    { key: 'NC256', label: 'NC 256', rate: 950, unit: 'kg', group: 'IC Chips · EMMC' },
-    { key: 'NC128', label: 'NC 128', rate: 700, unit: 'kg', group: 'IC Chips · EMMC' },
-    { key: 'NC64', label: 'NC 64', rate: 500, unit: 'kg', group: 'IC Chips · EMMC' },
-    { key: 'NC32', label: 'NC 32', rate: 250, unit: 'kg', group: 'IC Chips · EMMC' },
-    { key: 'NC16', label: 'NC 16', rate: 50, unit: 'kg', group: 'IC Chips · EMMC' },
-    { key: 'NC8', label: 'NC 8', rate: 45, unit: 'kg', group: 'IC Chips · EMMC' },
-    { key: 'AMINUS8G', label: 'A Minus (8g)', rate: 50, unit: 'pc', group: 'IC Chips · Other Codes' },
-    { key: '6580_7731E_A1', label: '6580 / 7731E A1', rate: 130, unit: 'pc', group: 'IC Chips · Other Codes' },
-    { key: '6580B', label: '6580 B', rate: 70, unit: 'pc', group: 'IC Chips · Other Codes' },
-    { key: '6580C', label: '6580 C', rate: 60, unit: 'pc', group: 'IC Chips · Other Codes' },
-    { key: '7731E_BC', label: '7731E B/C', rate: 70, unit: 'pc', group: 'IC Chips · Other Codes' },
-    { key: 'IPHONE_XR_UP', label: 'iPhone XR pataas', rate: 200, unit: 'pc', group: 'IC Chips · Other Codes' },
-    { key: 'IPHONE_TAB_BOARD', label: 'iPhone / iPad board', rate: 100, unit: 'pc', group: 'IC Chips · Other Codes' },
-    { key: 'IPHONE_BOARD', label: 'iPhone board', rate: 110, unit: 'pc', group: 'IC Chips · Other Codes' },
+    { key: 'A6', label: 'A6', rate: 1500, unit: 'kg', group: 'IC Chips · Coded' },
+    { key: 'A5', label: 'A5', rate: 1400, unit: 'kg', group: 'IC Chips · Coded' },
+    { key: 'A4', label: 'A4', rate: 1000, unit: 'kg', group: 'IC Chips · Coded' },
+    { key: 'A3', label: 'A3', rate: 700, unit: 'kg', group: 'IC Chips · Coded' },
+    { key: 'A2', label: 'A2', rate: 300, unit: 'kg', group: 'IC Chips · Coded' },
+    { key: 'A1', label: 'A1', rate: 140, unit: 'kg', group: 'IC Chips · Coded' },
+    { key: 'NC512', label: 'NC 512', rate: 1370, unit: 'kg', group: 'IC Chips · Non-Coded' },
+    { key: 'NC256', label: 'NC 256', rate: 950, unit: 'kg', group: 'IC Chips · Non-Coded' },
+    { key: 'NC128', label: 'NC 128', rate: 700, unit: 'kg', group: 'IC Chips · Non-Coded' },
+    { key: 'NC64', label: 'NC 64', rate: 500, unit: 'kg', group: 'IC Chips · Non-Coded' },
+    { key: 'NC32', label: 'NC 32', rate: 250, unit: 'kg', group: 'IC Chips · Non-Coded' },
+    { key: 'NC16', label: 'NC 16', rate: 50, unit: 'kg', group: 'IC Chips · Non-Coded' },
+    { key: 'NC8', label: 'NC 8', rate: 45, unit: 'kg', group: 'IC Chips · Non-Coded' },
+    { key: 'AMINUS8G', label: 'A Minus (8g)', rate: 50, unit: 'pc', group: 'IC Chips · Other' },
+    { key: '6580_7731E_A1', label: '6580 / 7731E A1', rate: 130, unit: 'pc', group: 'IC Chips · Other' },
+    { key: '6580B', label: '6580 B', rate: 70, unit: 'pc', group: 'IC Chips · Other' },
+    { key: '6580C', label: '6580 C', rate: 60, unit: 'pc', group: 'IC Chips · Other' },
+    { key: '7731E_BC', label: '7731E B/C', rate: 70, unit: 'pc', group: 'IC Chips · Other' },
+    { key: 'IPHONE_XR_UP', label: 'iPhone XR pataas', rate: 200, unit: 'pc', group: 'IC Chips · Other' },
+    { key: 'IPHONE_TAB_BOARD', label: 'iPhone / iPad board', rate: 100, unit: 'pc', group: 'IC Chips · Other' },
+    { key: 'IPHONE_BOARD', label: 'iPhone board', rate: 110, unit: 'pc', group: 'IC Chips · Other' },
     { key: 'TABLET', label: 'Tablet', rate: 1000, unit: 'kg', group: 'Whole boards' },
     { key: 'CHINA', label: 'China', rate: 1800, unit: 'kg', group: 'Whole boards' },
     { key: 'SAMSUNG', label: 'Samsung', rate: 3000, unit: 'kg', group: 'Whole boards' },
@@ -470,15 +470,15 @@ const SCRAPBOARD_ITEMS = [
     { key: 'NOKIA_ORIG', label: 'Nokia original', rate: 5000, unit: 'kg', group: 'Whole boards' },
     { key: 'ANDROID_B', label: 'Android B', rate: 30, unit: 'pc', group: 'Whole boards' },
     { key: 'ANDROID_C', label: 'Android C', rate: 20, unit: 'pc', group: 'Whole boards' },
-    { key: '6531E', label: '6531E', rate: 25, unit: 'pc', group: 'IC Chips · Other Codes' },
-    { key: '6531', label: '6531', rate: 19, unit: 'pc', group: 'IC Chips · Other Codes' },
-    { key: '6261', label: '6261', rate: 22, unit: 'pc', group: 'IC Chips · Other Codes' },
-    { key: '6533', label: '6533', rate: 15, unit: 'pc', group: 'IC Chips · Other Codes' },
-    { key: '6500', label: '6500', rate: 12, unit: 'pc', group: 'IC Chips · Other Codes' },
-    { key: 'RDA8851_88X9', label: 'RDA 8851 / 88X9', rate: 10, unit: 'pc', group: 'IC Chips · Other Codes' },
-    { key: '9863A_9832A', label: '9863A / 9832A', rate: 150, unit: 'pc', group: 'IC Chips · Other Codes' },
-    { key: '27AD', label: '27AD', rate: 50, unit: 'pc', group: 'IC Chips · Other Codes' },
-    { key: 'EXYNOS', label: 'Exynos', rate: 50, unit: 'pc', group: 'IC Chips · Other Codes' },
+    { key: '6531E', label: '6531E', rate: 25, unit: 'pc', group: 'IC Chips · Other' },
+    { key: '6531', label: '6531', rate: 19, unit: 'pc', group: 'IC Chips · Other' },
+    { key: '6261', label: '6261', rate: 22, unit: 'pc', group: 'IC Chips · Other' },
+    { key: '6533', label: '6533', rate: 15, unit: 'pc', group: 'IC Chips · Other' },
+    { key: '6500', label: '6500', rate: 12, unit: 'pc', group: 'IC Chips · Other' },
+    { key: 'RDA8851_88X9', label: 'RDA 8851 / 88X9', rate: 10, unit: 'pc', group: 'IC Chips · Other' },
+    { key: '9863A_9832A', label: '9863A / 9832A', rate: 150, unit: 'pc', group: 'IC Chips · Other' },
+    { key: '27AD', label: '27AD', rate: 50, unit: 'pc', group: 'IC Chips · Other' },
+    { key: 'EXYNOS', label: 'Exynos', rate: 50, unit: 'pc', group: 'IC Chips · Other' },
     { key: 'CAMERA_A', label: 'Camera A', rate: 4800, unit: 'kg', group: 'Parts & batteries' },
     { key: 'CAMERA_B', label: 'Camera B', rate: 1000, unit: 'kg', group: 'Parts & batteries' },
     { key: 'LCD_PHONE', label: 'LCD phone', rate: 30, unit: 'kg', group: 'Parts & batteries' },
@@ -578,8 +578,6 @@ function addScrapboardItem(category, name, unit, rate) {
         const resolvedCategory = scrapboardCategoryEntry(group);
         if (!resolvedCategory || !label || !['kg', 'pc'].includes(normalizedUnit) || !Number.isInteger(numericRate) || numericRate <= 0)
             return false;
-        if (scrapboardItems(true).some(item => String(item.group).toLowerCase() === resolvedCategory.label.toLowerCase() && String(item.label).toLowerCase() === label.toLowerCase()))
-            return false;
         const beforeItems = [...(db.pricing.customScrapboardItems || [])], beforeRates = { ...(db.pricing.scrapboardRates || {}) };
         const item = { key: customScrapboardKey(label), label, rate: numericRate, unit: normalizedUnit, group: resolvedCategory.key };
         db.pricing.customScrapboardItems = [...beforeItems, item];
@@ -638,8 +636,6 @@ function editScrapboardItem(key, changes) {
         const current = scrapboardItems(true).find(item => item.key === key), category = scrapboardCategoryEntry(changes?.group, true);
         const label = normalizedCatalogName(changes?.label), unit = String(changes?.unit || '').toLowerCase();
         if (!current || !category || !label || !['kg', 'pc'].includes(unit))
-            return false;
-        if (scrapboardItems(true).some(item => item.key !== key && item.group.toLowerCase() === category.label.toLowerCase() && item.label.toLowerCase() === label.toLowerCase()))
             return false;
         const before = catalogPricingSnapshot();
         db.pricing.scrapboardItemSettings = { ...(db.pricing.scrapboardItemSettings || {}), [key]: { label, group: category.key, unit, active: changes?.active !== false } };
@@ -1490,7 +1486,7 @@ function scrapboardCatalogManagementMarkup() {
     const categories = scrapboardCategoryEntries(true);
     return `<section class="scrap-catalog-manager"><details class="scrap-catalog-details" ${scrapboardCatalogExpanded ? 'open' : ''} ontoggle="rememberScrapboardCatalogExpanded(this.open)"><summary class="scrap-catalog-head"><div><div class="eyebrow">Catalog management</div><h2>Edit categories and items</h2><p>Rename, move, deactivate, or safely remove entries. Inactive entries stay in history but disappear from Buying and active rates.</p></div><span class="scrap-catalog-summary-action"><span class="scrap-catalog-count">${scrapboardItems(true).length} items</span><span class="scrap-catalog-toggle-label"><span class="when-closed">Expand catalog</span><span class="when-open">Minimize catalog</span><span class="scrap-catalog-chevron" aria-hidden="true">⌄</span></span></span></summary><div class="scrap-catalog-groups">${categories.map(category => {
         const items = scrapboardCategoryItems(category.key), categoryToken = catalogActionToken(category.key);
-        return `<article class="scrap-catalog-group${category.active ? '' : ' is-inactive'}"><div class="scrap-catalog-group-head"><div><strong>${esc(category.label)}</strong>${category.active ? '' : '<span class="scrap-catalog-status">Inactive</span>'}<small>${items.length} item${items.length === 1 ? '' : 's'}</small></div><button class="btn secondary small" type="button" onclick="openScrapboardCategoryEditor('${categoryToken}')">Manage category</button></div><div class="scrap-catalog-items">${items.length ? items.map(item => `<div class="scrap-catalog-item"><div><strong>${esc(item.label)}</strong>${item.active ? '' : '<span class="scrap-catalog-status">Inactive</span>'}<small>${esc(item.unit)} · ${esc(item.key)}</small></div><button class="btn secondary small" type="button" onclick="openScrapboardItemEditor('${catalogActionToken(item.key)}')">Edit item</button></div>`).join('') : '<p class="scrap-catalog-empty">No items yet.</p>'}</div></article>`;
+        return `<article class="scrap-catalog-group${category.active ? '' : ' is-inactive'}"><div class="scrap-catalog-group-head"><div><strong>${esc(category.label)}</strong>${category.active ? '' : '<span class="scrap-catalog-status">Inactive</span>'}<small>${items.length} item${items.length === 1 ? '' : 's'}</small></div><button class="btn secondary small" type="button" onclick="openScrapboardCategoryEditor('${categoryToken}')">Manage category</button></div><div class="scrap-catalog-items">${items.length ? items.map(item => `<div class="scrap-catalog-item"><div><strong>${esc(item.label)}</strong>${item.active ? '' : '<span class="scrap-catalog-status">Inactive</span>'}<small>${esc(item.unit)}</small></div><button class="btn secondary small" type="button" onclick="openScrapboardItemEditor('${catalogActionToken(item.key)}')">Edit item</button></div>`).join('') : '<p class="scrap-catalog-empty">No items yet.</p>'}</div></article>`;
     }).join('')}</div></details></section>`;
 }
 function scrapboardCategoryEditorMarkup(key) {
@@ -1571,7 +1567,7 @@ async function saveScrapboardItemEditor(token) {
         return;
     }
     if (!await editScrapboardItem(key, { label, group, unit, active: item.ownActive })) {
-        toast('Item was not saved. Check for a duplicate name.');
+        toast('Item was not saved');
         return;
     }
     closeScrapboardCatalogEditor();
@@ -1821,10 +1817,6 @@ async function submitScrapboardItem() {
     }
     if (!categoryEntry) {
         toast('Choose a valid category');
-        return;
-    }
-    if (scrapboardItems().some(item => String(item.group).toLowerCase() === categoryEntry.label.toLowerCase() && String(item.label).toLowerCase() === name.toLowerCase())) {
-        toast('That item already exists in this category');
         return;
     }
     if (!await addScrapboardItem(category, name, unit, rate)) {

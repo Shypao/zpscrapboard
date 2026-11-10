@@ -68,9 +68,9 @@ test('admin can rename and deactivate a built-in category without losing histori
   const api = await loadCustomItemApi();
   api.setAdmin();
 
-  assert.equal(await api.editCategory('IC Chips · EMCP', { label: 'EMCP IC', active: true }), true);
-  assert.equal(api.catalog().find(item => item.key === 'A6').group, 'EMCP IC');
-  assert.equal(await api.editCategory('IC Chips · EMCP', { label: 'EMCP IC', active: false }), true);
+  assert.equal(await api.editCategory('IC Chips · Coded', { label: 'Coded IC', active: true }), true);
+  assert.equal(api.catalog().find(item => item.key === 'A6').group, 'Coded IC');
+  assert.equal(await api.editCategory('IC Chips · Coded', { label: 'Coded IC', active: false }), true);
   assert.equal(api.catalog().some(item => item.key === 'A6'), false);
   assert.equal(api.catalog(true).find(item => item.key === 'A6').label, 'A6');
   assert.equal(api.label('A6'), 'A6');
@@ -90,12 +90,13 @@ test('admin can override a built-in item label category unit and active state', 
   assert.equal(api.label('A6'), 'Premium A6');
 });
 
-test('catalog management rejects duplicate normalized category and item labels', async () => {
+test('catalog management rejects duplicate category labels but allows duplicate item names', async () => {
   const api = await loadCustomItemApi();
   api.setAdmin();
 
-  assert.equal(await api.editCategory('Whole boards', { label: ' IC Chips · EMCP ', active: true }), false);
-  assert.equal(await api.editItem('A6', { label: ' A5 ', group: 'IC Chips · EMCP', unit: 'kg', active: true }), false);
+  assert.equal(await api.editCategory('Whole boards', { label: ' IC Chips · Coded ', active: true }), false);
+  assert.equal(await api.editItem('A6', { label: ' A5 ', group: 'IC Chips · Coded', unit: 'kg', active: true }), true);
+  assert.equal(api.catalog(true).find(item => item.key === 'A6').label, 'A5');
 });
 
 test('only unused custom entries can be permanently deleted', async () => {
@@ -143,7 +144,7 @@ test('failed catalog-management save rolls back a built-in item edit', async () 
 
   assert.equal(await api.editItem('A6', { label: 'Unsaved A6', group: 'Whole boards', unit: 'pc', active: false }), false);
   const item = api.catalog(true).find(entry => entry.key === 'A6');
-  assert.deepEqual({ label: item.label, group: item.group, unit: item.unit, active: item.active }, { label: 'A6', group: 'IC Chips · EMCP', unit: 'kg', active: true });
+  assert.deepEqual({ label: item.label, group: item.group, unit: item.unit, active: item.active }, { label: 'A6', group: 'IC Chips · Coded', unit: 'kg', active: true });
 });
 
 test('admin can add a persistent category and item to the combined catalog', async () => {
@@ -164,7 +165,7 @@ test('admin can add a persistent category and item to the combined catalog', asy
   assert.equal(api.saveCalls(), 2);
 });
 
-test('quick add rejects blank duplicate and invalid item values', async () => {
+test('quick add allows duplicate item names but rejects blank and invalid values', async () => {
   const api = await loadCustomItemApi();
   api.setAdmin();
 
@@ -172,12 +173,12 @@ test('quick add rejects blank duplicate and invalid item values', async () => {
   assert.equal(await api.addCategory(' ic extras '), false);
   assert.equal(await api.addCategory('   '), false);
   assert.equal(await api.addItem('IC Extras', 'New Chip', 'pc', 10), true);
-  assert.equal(await api.addItem('ic extras', ' new chip ', 'pc', 20), false);
+  assert.equal(await api.addItem('ic extras', ' new chip ', 'pc', 20), true);
   assert.equal(await api.addItem('Missing Category', 'Chip', 'pc', 10), false);
   assert.equal(await api.addItem('IC Extras', '', 'pc', 10), false);
   assert.equal(await api.addItem('IC Extras', 'Bad Unit', 'box', 10), false);
   assert.equal(await api.addItem('IC Extras', 'Bad Rate', 'kg', 0), false);
-  assert.equal(api.customItems().length, 1);
+  assert.equal(api.customItems().length, 2);
 });
 
 test('staff cannot create custom categories or items', async () => {
@@ -227,6 +228,19 @@ test('Daily Rates renders compact category and item management only for administ
   assert.doesNotMatch(staffHtml, /Catalog management|Manage category|Edit item/);
 });
 
+test('Catalog management hides custom internal keys below item names', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  await api.addCategory('Visible Names');
+  await api.addItem('Visible Names', 'Repeated Name', 'pc', 25);
+  const customKey = api.customItems()[0].key;
+
+  const html = api.renderRates();
+  assert.match(html, /<strong>Repeated Name<\/strong>[^]*<small>pc<\/small>/);
+  assert.doesNotMatch(html, new RegExp(`<small>pc · ${customKey}<\\/small>`));
+  assert.match(html, new RegExp(`openScrapboardItemEditor\\('${customKey}'\\)`));
+});
+
 test('Catalog management is expandable and stays minimized until the administrator opens it', async () => {
   const api = await loadCustomItemApi();
   api.setAdmin();
@@ -260,10 +274,10 @@ test('Daily Rates groups IC chips under one category with subcategories', async 
 
   const html = api.renderRates();
   assert.match(html, /<h3>IC Chips<\/h3>/);
-  assert.match(html, /<h4>EMCP<\/h4>/);
-  assert.match(html, /<h4>EMMC<\/h4>/);
-  assert.match(html, /<h4>Other Codes<\/h4>/);
-  assert.ok(html.indexOf('<h4>EMCP</h4>') < html.indexOf('<h4>EMMC</h4>'));
+  assert.match(html, /<h4>Coded<\/h4>/);
+  assert.match(html, /<h4>Non-Coded<\/h4>/);
+  assert.match(html, /<h4>Other<\/h4>/);
+  assert.ok(html.indexOf('<h4>Coded</h4>') < html.indexOf('<h4>Non-Coded</h4>'));
   assert.doesNotMatch(html, /<h3>IC chips ·/i);
   assert.match(html, /<h3>Whole boards<\/h3>/);
 });
@@ -365,7 +379,7 @@ test('item editor exposes label category unit active state and safe delete rules
 test('inactive definitions remain visible in management while disappearing from rates buying and export', async () => {
   const api = await loadCustomItemApi();
   api.setAdmin();
-  await api.editItem('A6', { label: 'A6', group: 'IC Chips · EMCP', unit: 'kg', active: false });
+  await api.editItem('A6', { label: 'A6', group: 'IC Chips · Coded', unit: 'kg', active: false });
 
   const rates = api.renderRates();
   assert.match(rates, /Catalog management/);
@@ -388,7 +402,7 @@ test('stable category keys win over renamed labels when resolving item groups', 
   const api = await loadCustomItemApi();
   api.setAdmin();
   await api.editCategory('Whole boards', { label: 'Main boards', active: true });
-  await api.editCategory('IC Chips · EMCP', { label: 'Whole boards', active: true });
+  await api.editCategory('IC Chips · Coded', { label: 'Whole boards', active: true });
 
   assert.equal(api.catalog(true).find(item => item.key === 'TABLET').group, 'Main boards');
   assert.equal(api.catalog(true).find(item => item.key === 'A6').group, 'Whole boards');
@@ -398,12 +412,12 @@ test('Quick Add submits stable category keys when display labels overlap old key
   const api = await loadCustomItemApi();
   api.setAdmin();
   await api.editCategory('Whole boards', { label: 'Main boards', active: true });
-  await api.editCategory('IC Chips · EMCP', { label: 'Whole boards', active: true });
+  await api.editCategory('IC Chips · Coded', { label: 'Whole boards', active: true });
 
   const html = api.renderRates();
-  assert.match(html, /<option value="IC Chips · EMCP">Whole boards<\/option>/);
+  assert.match(html, /<option value="IC Chips · Coded">Whole boards<\/option>/);
   assert.match(html, /<option value="Whole boards">Main boards<\/option>/);
-  assert.equal(await api.addItem('IC Chips · EMCP', 'Stable Key Chip', 'pc', 25), true);
+  assert.equal(await api.addItem('IC Chips · Coded', 'Stable Key Chip', 'pc', 25), true);
   assert.equal(api.catalog(true).find(item => item.label === 'Stable Key Chip').group, 'Whole boards');
 });
 
@@ -419,13 +433,13 @@ test('Quick Add rejects duplicates of inactive category keys and labels', async 
 test('item editor preserves the item enabled state while its category is inactive', async () => {
   const api = await loadCustomItemApi();
   api.setAdmin();
-  await api.editCategory('IC Chips · EMCP', { label: 'IC Chips · EMCP', active: false });
+  await api.editCategory('IC Chips · Coded', { label: 'IC Chips · Coded', active: false });
   const hidden = api.catalog(true).find(item => item.key === 'A6');
   assert.equal(hidden.active, false);
   assert.equal(hidden.ownActive, true);
 
-  await api.editItem('A6', { label: 'Renamed A6', group: 'IC Chips · EMCP', unit: 'kg', active: hidden.ownActive });
-  await api.editCategory('IC Chips · EMCP', { label: 'IC Chips · EMCP', active: true });
+  await api.editItem('A6', { label: 'Renamed A6', group: 'IC Chips · Coded', unit: 'kg', active: hidden.ownActive });
+  await api.editCategory('IC Chips · Coded', { label: 'IC Chips · Coded', active: true });
   const restored = api.catalog(true).find(item => item.key === 'A6');
   assert.equal(restored.active, true);
   assert.equal(restored.label, 'Renamed A6');
@@ -436,8 +450,8 @@ test('failed overlapping catalog save cannot roll back a later successful edit',
   api.setAdmin();
   const resolveFirst = api.queueSave();
   const resolveSecond = api.queueSave();
-  const first = api.editItem('A6', { label: 'First edit', group: 'IC Chips · EMCP', unit: 'kg', active: true });
-  const second = api.editItem('A5', { label: 'Second edit', group: 'IC Chips · EMCP', unit: 'kg', active: true });
+  const first = api.editItem('A6', { label: 'First edit', group: 'IC Chips · Coded', unit: 'kg', active: true });
+  const second = api.editItem('A5', { label: 'Second edit', group: 'IC Chips · Coded', unit: 'kg', active: true });
 
   resolveSecond(true);
   resolveFirst(false);
@@ -449,11 +463,11 @@ test('failed overlapping catalog save cannot roll back a later successful edit',
 test('Buying falls back to the first active item when the saved selection is inactive', async () => {
   const api = await loadCustomItemApi();
   api.setAdmin();
-  await api.editCategory('IC Chips · EMCP', { label: 'IC Chips · EMCP', active: false });
+  await api.editCategory('IC Chips · Coded', { label: 'IC Chips · Coded', active: false });
 
   const html = api.renderBuying();
   assert.match(html, /id="b_karat" type="hidden" value="NC512"/);
-  assert.match(html, /data-selected-label="EMMC · NC 512"/);
+  assert.match(html, /data-selected-label="Non-Coded · NC 512"/);
   assert.match(html, /id="b_rate"[^>]*value="1370"/);
 });
 
@@ -527,8 +541,8 @@ test('Buying combines every IC chip subcategory under one searchable IC Chips ca
 
   const html = api.renderBuying();
   assert.equal((html.match(/>IC Chips<\/span>/g) || []).length, 1);
-  assert.match(html, /EMCP/);
-  assert.match(html, /EMMC/);
+  assert.match(html, /Coded/);
+  assert.match(html, /Non-Coded/);
   assert.match(html, /EMCP/);
   assert.match(html, /filterScrapboardBuyingItems/);
 });
