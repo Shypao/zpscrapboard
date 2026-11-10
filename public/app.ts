@@ -333,27 +333,27 @@ const PLATINUM_GRADES = [
   {key:'850', label:'850', mult:850/999},
 ];
 const SCRAPBOARD_ITEMS = [
-  {key:'A6',label:'A6',rate:1500,unit:'kg',group:'IC chips · A series'},
-  {key:'A5',label:'A5',rate:1400,unit:'kg',group:'IC chips · A series'},
-  {key:'A4',label:'A4',rate:1000,unit:'kg',group:'IC chips · A series'},
-  {key:'A3',label:'A3',rate:700,unit:'kg',group:'IC chips · A series'},
-  {key:'A2',label:'A2',rate:300,unit:'kg',group:'IC chips · A series'},
-  {key:'A1',label:'A1',rate:140,unit:'kg',group:'IC chips · A series'},
-  {key:'NC512',label:'NC 512',rate:1370,unit:'kg',group:'IC chips · NC series'},
-  {key:'NC256',label:'NC 256',rate:950,unit:'kg',group:'IC chips · NC series'},
-  {key:'NC128',label:'NC 128',rate:700,unit:'kg',group:'IC chips · NC series'},
-  {key:'NC64',label:'NC 64',rate:500,unit:'kg',group:'IC chips · NC series'},
-  {key:'NC32',label:'NC 32',rate:250,unit:'kg',group:'IC chips · NC series'},
-  {key:'NC16',label:'NC 16',rate:50,unit:'kg',group:'IC chips · NC series'},
-  {key:'NC8',label:'NC 8',rate:45,unit:'kg',group:'IC chips · NC series'},
-  {key:'AMINUS8G',label:'A Minus (8g)',rate:50,unit:'pc',group:'IC chips · Phone processors'},
-  {key:'6580_7731E_A1',label:'6580 / 7731E A1',rate:130,unit:'pc',group:'IC chips · Phone processors'},
-  {key:'6580B',label:'6580 B',rate:70,unit:'pc',group:'IC chips · Phone processors'},
-  {key:'6580C',label:'6580 C',rate:60,unit:'pc',group:'IC chips · Phone processors'},
-  {key:'7731E_BC',label:'7731E B/C',rate:70,unit:'pc',group:'IC chips · Phone processors'},
-  {key:'IPHONE_XR_UP',label:'iPhone XR pataas',rate:200,unit:'pc',group:'IC chips · Phone processors'},
-  {key:'IPHONE_TAB_BOARD',label:'iPhone / iPad board',rate:100,unit:'pc',group:'IC chips · Phone processors'},
-  {key:'IPHONE_BOARD',label:'iPhone board',rate:110,unit:'pc',group:'IC chips · Phone processors'},
+  {key:'A6',label:'A6',rate:1500,unit:'kg',group:'IC Chips · Coded'},
+  {key:'A5',label:'A5',rate:1400,unit:'kg',group:'IC Chips · Coded'},
+  {key:'A4',label:'A4',rate:1000,unit:'kg',group:'IC Chips · Coded'},
+  {key:'A3',label:'A3',rate:700,unit:'kg',group:'IC Chips · Coded'},
+  {key:'A2',label:'A2',rate:300,unit:'kg',group:'IC Chips · Coded'},
+  {key:'A1',label:'A1',rate:140,unit:'kg',group:'IC Chips · Coded'},
+  {key:'NC512',label:'NC 512',rate:1370,unit:'kg',group:'IC Chips · Non-Coded'},
+  {key:'NC256',label:'NC 256',rate:950,unit:'kg',group:'IC Chips · Non-Coded'},
+  {key:'NC128',label:'NC 128',rate:700,unit:'kg',group:'IC Chips · Non-Coded'},
+  {key:'NC64',label:'NC 64',rate:500,unit:'kg',group:'IC Chips · Non-Coded'},
+  {key:'NC32',label:'NC 32',rate:250,unit:'kg',group:'IC Chips · Non-Coded'},
+  {key:'NC16',label:'NC 16',rate:50,unit:'kg',group:'IC Chips · Non-Coded'},
+  {key:'NC8',label:'NC 8',rate:45,unit:'kg',group:'IC Chips · Non-Coded'},
+  {key:'AMINUS8G',label:'A Minus (8g)',rate:50,unit:'pc',group:'IC Chips · Other Codes'},
+  {key:'6580_7731E_A1',label:'6580 / 7731E A1',rate:130,unit:'pc',group:'IC Chips · Other Codes'},
+  {key:'6580B',label:'6580 B',rate:70,unit:'pc',group:'IC Chips · Other Codes'},
+  {key:'6580C',label:'6580 C',rate:60,unit:'pc',group:'IC Chips · Other Codes'},
+  {key:'7731E_BC',label:'7731E B/C',rate:70,unit:'pc',group:'IC Chips · Other Codes'},
+  {key:'IPHONE_XR_UP',label:'iPhone XR pataas',rate:200,unit:'pc',group:'IC Chips · Other Codes'},
+  {key:'IPHONE_TAB_BOARD',label:'iPhone / iPad board',rate:100,unit:'pc',group:'IC Chips · Other Codes'},
+  {key:'IPHONE_BOARD',label:'iPhone board',rate:110,unit:'pc',group:'IC Chips · Other Codes'},
   {key:'TABLET',label:'Tablet',rate:1000,unit:'kg',group:'Whole boards'},
   {key:'CHINA',label:'China',rate:1800,unit:'kg',group:'Whole boards'},
   {key:'SAMSUNG',label:'Samsung',rate:3000,unit:'kg',group:'Whole boards'},
@@ -361,15 +361,15 @@ const SCRAPBOARD_ITEMS = [
   {key:'NOKIA_ORIG',label:'Nokia original',rate:5000,unit:'kg',group:'Whole boards'},
   {key:'ANDROID_B',label:'Android B',rate:30,unit:'pc',group:'Whole boards'},
   {key:'ANDROID_C',label:'Android C',rate:20,unit:'pc',group:'Whole boards'},
-  {key:'6531E',label:'6531E',rate:25,unit:'pc',group:'IC chips · Keypad codes'},
-  {key:'6531',label:'6531',rate:19,unit:'pc',group:'IC chips · Keypad codes'},
-  {key:'6261',label:'6261',rate:22,unit:'pc',group:'IC chips · Keypad codes'},
-  {key:'6533',label:'6533',rate:15,unit:'pc',group:'IC chips · Keypad codes'},
-  {key:'6500',label:'6500',rate:12,unit:'pc',group:'IC chips · Keypad codes'},
-  {key:'RDA8851_88X9',label:'RDA 8851 / 88X9',rate:10,unit:'pc',group:'IC chips · Keypad codes'},
-  {key:'9863A_9832A',label:'9863A / 9832A',rate:150,unit:'pc',group:'IC chips · Keypad codes'},
-  {key:'27AD',label:'27AD',rate:50,unit:'pc',group:'IC chips · Keypad codes'},
-  {key:'EXYNOS',label:'Exynos',rate:50,unit:'pc',group:'IC chips · Keypad codes'},
+  {key:'6531E',label:'6531E',rate:25,unit:'pc',group:'IC Chips · Other Codes'},
+  {key:'6531',label:'6531',rate:19,unit:'pc',group:'IC Chips · Other Codes'},
+  {key:'6261',label:'6261',rate:22,unit:'pc',group:'IC Chips · Other Codes'},
+  {key:'6533',label:'6533',rate:15,unit:'pc',group:'IC Chips · Other Codes'},
+  {key:'6500',label:'6500',rate:12,unit:'pc',group:'IC Chips · Other Codes'},
+  {key:'RDA8851_88X9',label:'RDA 8851 / 88X9',rate:10,unit:'pc',group:'IC Chips · Other Codes'},
+  {key:'9863A_9832A',label:'9863A / 9832A',rate:150,unit:'pc',group:'IC Chips · Other Codes'},
+  {key:'27AD',label:'27AD',rate:50,unit:'pc',group:'IC Chips · Other Codes'},
+  {key:'EXYNOS',label:'Exynos',rate:50,unit:'pc',group:'IC Chips · Other Codes'},
   {key:'CAMERA_A',label:'Camera A',rate:4800,unit:'kg',group:'Parts & batteries'},
   {key:'CAMERA_B',label:'Camera B',rate:1000,unit:'kg',group:'Parts & batteries'},
   {key:'LCD_PHONE',label:'LCD phone',rate:30,unit:'kg',group:'Parts & batteries'},
@@ -1150,7 +1150,7 @@ function scrapboardCategoryOptions(categories,selectedKey=''){
   const option=category=>`<option value="${esc(category.key)}"${category.key===selectedKey?' selected':''}>${esc(scrapboardIcChipSubcategory(category.label)||category.label)}${category.active?'':' (inactive)'}</option>`;
   const icCategories=categories.filter(category=>scrapboardIcChipSubcategory(category.label));
   const otherCategories=categories.filter(category=>!scrapboardIcChipSubcategory(category.label));
-  return `${icCategories.length?`<optgroup label="IC CHIP">${icCategories.map(option).join('')}</optgroup>`:''}${otherCategories.map(option).join('')}`;
+  return `${icCategories.length?`<optgroup label="IC Chips">${icCategories.map(option).join('')}</optgroup>`:''}${otherCategories.map(option).join('')}`;
 }
 function scrapboardRateSections(entries=Object.entries(scrapboardRateGroups())){
   const sections=[];
@@ -1158,7 +1158,7 @@ function scrapboardRateSections(entries=Object.entries(scrapboardRateGroups())){
   entries.forEach(([group,items])=>{
     const subcategory=scrapboardIcChipSubcategory(group);
     if(subcategory){
-      if(!icSection){icSection={label:'IC CHIP',groups:[]};sections.push(icSection);}
+      if(!icSection){icSection={label:'IC Chips',groups:[]};sections.push(icSection);}
       icSection.groups.push({label:subcategory,items:sortedScrapboardRateItems(items)});
       return;
     }
@@ -2496,16 +2496,18 @@ async function commitPurchaseBatch(printAfter=false){
   try{
     captureBuyingDraftForm();
     const customer=purchaseCustomer();
-    const previousCustomerCount=db.customers.length,previousStockCount=db.stock.length;
+    const previousCustomerCount=db.customers.length,previousStock=JSON.parse(JSON.stringify(db.stock)),previousInventoryPools=JSON.parse(JSON.stringify(db.inventoryPools));
     let customerId=customer.id;
     if(customer.isNew){ customerId=uid('cust'); db.customers.push({id:customerId,name:customer.name,contact:'',notes:''}); }
     const batchId=uid('buy');
     const shared={date:val('b_date')||todayStr(),recordedAt:new Date().toISOString(),customerId,customerName:customer.name,paymentMethod:val('b_pay'),staff:currentUser?.displayName||'Signed-in staff',
       status:val('b_status'),batchId};
-    purchaseBatch.forEach(item=>db.stock.push({...item,...shared,id:uid('stk'),cost:item.payout,remarks:String(item.remarks??val('b_remarks')).trim()}));
+    const recordedItems=purchaseBatch.map(item=>({...item,...shared,id:uid('stk'),cost:item.payout,remarks:String(item.remarks??val('b_remarks')).trim()}));
+    db.stock.push(...recordedItems);
+    const autoPooledCount=autoPoolMatchingScrapboardInventory(recordedItems.map(item=>item.id));
     const count=purchaseBatch.length,total=roundMoney(purchaseBatch.reduce((sum,item)=>sum+Number(item.payout),0));
     const saved=await saveDB();
-    if(!saved){ db.customers.splice(previousCustomerCount); db.stock.splice(previousStockCount); toast('The purchase was not recorded. Your payout draft is still saved.'); return; }
+    if(!saved){ db.customers.splice(previousCustomerCount); db.stock=previousStock;db.inventoryPools=previousInventoryPools;toast('The purchase was not recorded. Your payout draft is still saved.'); return; }
     purchaseBatch=[]; closePurchaseSummary();
     // Reset the form synchronously before rebuilding metal/grade controls.
     // The draft DELETE continues in the background without delaying the UI.
@@ -2517,7 +2519,7 @@ async function commitPurchaseBatch(printAfter=false){
       if(typeof requestAnimationFrame==='function')requestAnimationFrame(()=>setTimeout(refreshBuying,0));
       else refreshBuying();
     }else refreshBuying();
-    toast(`${count} items recorded · ${fmtMoney(total)}`);
+    toast(`${count} items recorded · ${fmtMoney(total)}${autoPooledCount?` · ${autoPooledCount} matching inventory records automatically pooled`:''}`);
   } finally { purchaseCommitBusy=false; }
 }
 
@@ -3163,6 +3165,45 @@ function inventoryPoolingSelection(){
   const items=selectedInventoryForPool(),pools=selectedExistingPoolsForPooling();
   if(pools.length>1) return {items,pools,valid:false};
   return {items,pools,valid:pools.length===1?items.length>=1:items.length>=2};
+}
+function automaticScrapboardPoolKey(item){
+  if(String(item?.metal||'').toLowerCase()!=='scrapboard') return '';
+  const categoryKey=normalizedCatalogName(item.scrapboardCategoryKey||scrapboardItemCategoryKey(item.karat));
+  const classification=String(item.karat||'').trim();
+  return categoryKey&&classification?`${categoryKey.toLowerCase()}\u0000${classification.toLowerCase()}`:'';
+}
+function automaticScrapboardPoolCandidate(item){
+  return automaticScrapboardPoolKey(item)&&Number(item.currentWeight)>0&&item.status==='Available'&&!item.inventoryPoolId&&!item.liquidationBatchId&&!item.refiningBatchId;
+}
+function addItemsToAutomaticScrapboardPool(pool,items){
+  const additions=items.filter(item=>automaticScrapboardPoolCandidate(item));
+  if(!pool||!additions.length)return pool;
+  const originals=additions.map(item=>({itemId:item.id,originalWeight:roundWeight(item.currentWeight),originalCost:roundMoney(item.cost),statusAtPooling:item.status}));
+  pool.itemIds=Array.from(new Set([...(pool.itemIds||[]),...additions.map(item=>item.id)]));
+  pool.originalItems=[...(pool.originalItems||[]),...originals];
+  pool.originalWeight=roundWeight(Number(pool.originalWeight||0)+originals.reduce((sum,item)=>sum+item.originalWeight,0));
+  pool.originalCost=roundMoney(Number(pool.originalCost||0)+originals.reduce((sum,item)=>sum+item.originalCost,0));
+  pool.updatedAt=new Date().toISOString();
+  additions.forEach(item=>{item.inventoryPoolId=pool.id;item.status='Available';});
+  syncInventoryPool(pool);return pool;
+}
+function autoPoolMatchingScrapboardInventory(newItemIds=[]){
+  const newIds=new Set(newItemIds);
+  const keys=Array.from(new Set(db.stock.filter(item=>newIds.has(item.id)).map(automaticScrapboardPoolKey).filter(Boolean)));
+  let pooled=0;
+  keys.forEach(key=>{
+    const candidates=db.stock.filter(item=>automaticScrapboardPoolCandidate(item)&&automaticScrapboardPoolKey(item)===key);
+    let pool=(db.inventoryPools||[]).find(record=>record.automatic===true&&record.automaticMatchKey===key&&!record.onHold&&inventoryPoolSnapshot(record).weight>0);
+    if(!pool&&candidates.length<2)return;
+    if(!pool){
+      const sample=candidates[0],categoryKey=sample.scrapboardCategoryKey||scrapboardItemCategoryKey(sample.karat),category=scrapboardCategoryEntry(categoryKey,true)?.label||categoryKey;
+      pool={id:nextSequenceId('POOL',db.inventoryPools),name:`${category} · ${gradeLabel('Scrapboard',sample.karat)}`,metal:'Scrapboard',karat:sample.karat,scrapboardCategoryKey:categoryKey,automaticMatchKey:key,automatic:true,itemIds:[],originalItems:[],originalWeight:0,originalCost:0,onHold:false,inventoryStatus:'Available',notes:'Automatically pooled by category and classification',createdAt:new Date().toISOString(),createdBy:currentUser?.displayName||'System'};
+      db.inventoryPools.push(pool);
+    }
+    const additions=candidates.filter(item=>!pool.itemIds?.includes(item.id));
+    addItemsToAutomaticScrapboardPool(pool,additions);pooled+=additions.length;
+  });
+  return pooled;
 }
 function inventoryPoolMergeSelection(){
   const pools=Array.from(inventoryPoolRowSelection,id=>db.inventoryPools.find(pool=>pool.id===id)).filter(pool=>pool&&inventoryPoolSnapshot(pool).weight>0);
@@ -5451,7 +5492,7 @@ function scrapboardBuyingSections(items=scrapboardItems()){
   const byLabel=new Map();
   items.forEach(item=>{
     const subcategory=scrapboardIcChipSubcategory(item.group);
-    const label=subcategory?'IC CHIP':item.group;
+    const label=subcategory?'IC Chips':item.group;
     let section=byLabel.get(label);
     if(!section){section={label,items:[]};byLabel.set(label,section);sections.push(section);}
     section.items.push({...item,subcategory});
@@ -5564,7 +5605,7 @@ function purchaseItemFromForm(){
   const suggested=roundPeso(quantity*rate),payoutInput=val('b_payout'),payout=payoutInput?roundPeso(Number(payoutInput)):suggested;
   if(!Number.isFinite(payout)||payout<0){toast('Enter a valid final payout');return null;}
   const inventoryWeight=definition.unit==='kg'?roundWeight(quantity*1000):quantity;
-  return {id:uid('line'),metal:'Scrapboard',itemType:'Scrapboard',karat:key,unit:definition.unit,purchaseQuantity:quantity,grossWeight:inventoryWeight,deductions:0,netWeight:inventoryWeight,currentWeight:inventoryWeight,rate,systemRate,rateOverridden:rate!==systemRate,payoutOverridden:payout!==suggested,suggestedAmount:suggested,payout,remarks:val('b_remarks').trim(),overrideReason:''};
+  return {id:uid('line'),metal:'Scrapboard',itemType:'Scrapboard',karat:key,scrapboardCategoryKey:scrapboardItemCategoryKey(key),unit:definition.unit,purchaseQuantity:quantity,grossWeight:inventoryWeight,deductions:0,netWeight:inventoryWeight,currentWeight:inventoryWeight,rate,systemRate,rateOverridden:rate!==systemRate,payoutOverridden:payout!==suggested,suggestedAmount:suggested,payout,remarks:val('b_remarks').trim(),overrideReason:''};
 }
 function renderPurchaseBatchPanelMarkup(){
   const total=roundMoney(purchaseBatch.reduce((sum,item)=>sum+Number(item.payout),0));

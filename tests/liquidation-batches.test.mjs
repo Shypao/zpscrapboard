@@ -2073,7 +2073,7 @@ test('scrapboard buying page exposes category choices and searchable classificat
   api.setState(stateFixture());
 
   const html=api.renderBuying();
-  assert.match(html, /<strong>A6<\/strong><small>A series<\/small>/);
+  assert.match(html, /<strong>A6<\/strong><small>Coded<\/small>/);
   assert.match(html, /<b>PHP 1,500\/kg<\/b>/);
   assert.match(html, /onclick="setScrapboardBuyingCategory\('Whole%20units'\)"/);
   assert.match(html, /id="b_item_search"/);
