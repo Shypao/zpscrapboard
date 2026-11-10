@@ -1130,17 +1130,39 @@ function scrapboardRateGroups(){
     return groups;
   },initial);
 }
+let scrapboardRateSort='catalog';
+function scrapboardRateValue(item){ return roundPeso(db.pricing.scrapboardRates?.[item.key]||item.rate); }
+function sortedScrapboardRateItems(items){
+  const sorted=[...items];
+  if(scrapboardRateSort==='high') return sorted.sort((a,b)=>scrapboardRateValue(b)-scrapboardRateValue(a)||String(a.label).localeCompare(String(b.label)));
+  if(scrapboardRateSort==='low') return sorted.sort((a,b)=>scrapboardRateValue(a)-scrapboardRateValue(b)||String(a.label).localeCompare(String(b.label)));
+  return sorted;
+}
+function setScrapboardRateSort(value){
+  scrapboardRateSort=['high','low'].includes(value)?value:'catalog';
+  render();
+}
+function scrapboardIcChipSubcategory(value){
+  const match=String(value||'').match(/^IC\s*CHIPS?\s*(?:·|•|:|-)\s*(.+)$/i);
+  return match?.[1]?.trim()||'';
+}
+function scrapboardCategoryOptions(categories,selectedKey=''){
+  const option=category=>`<option value="${esc(category.key)}"${category.key===selectedKey?' selected':''}>${esc(scrapboardIcChipSubcategory(category.label)||category.label)}${category.active?'':' (inactive)'}</option>`;
+  const icCategories=categories.filter(category=>scrapboardIcChipSubcategory(category.label));
+  const otherCategories=categories.filter(category=>!scrapboardIcChipSubcategory(category.label));
+  return `${icCategories.length?`<optgroup label="IC CHIP">${icCategories.map(option).join('')}</optgroup>`:''}${otherCategories.map(option).join('')}`;
+}
 function scrapboardRateSections(entries=Object.entries(scrapboardRateGroups())){
   const sections=[];
   let icSection=null;
   entries.forEach(([group,items])=>{
-    const match=String(group).match(/^IC chips\s*(?:·|:|-)\s*(.+)$/i);
-    if(match){
-      if(!icSection){icSection={label:'IC chips',groups:[]};sections.push(icSection);}
-      icSection.groups.push({label:match[1].trim(),items});
+    const subcategory=scrapboardIcChipSubcategory(group);
+    if(subcategory){
+      if(!icSection){icSection={label:'IC CHIP',groups:[]};sections.push(icSection);}
+      icSection.groups.push({label:subcategory,items:sortedScrapboardRateItems(items)});
       return;
     }
-    sections.push({label:group,groups:[{label:'',items}]});
+    sections.push({label:group,groups:[{label:'',items:sortedScrapboardRateItems(items)}]});
   });
   return sections;
 }
@@ -1164,15 +1186,15 @@ function scrapboardCatalogManagementMarkup(){
 function scrapboardCategoryEditorMarkup(key){
   const category=scrapboardCategoryEntry(key,true);
   if(!category) return '';
-  const token=catalogActionToken(category.key),toggleLabel=category.active?'Deactivate':'Activate';
-  return `<div class="edit-modal scrap-catalog-modal" role="dialog" aria-modal="true" aria-labelledby="scrap_catalog_editor_title"><div class="summary-modal-head"><div><div class="eyebrow">Catalog management</div><h2 id="scrap_catalog_editor_title">Edit category</h2></div><button type="button" class="modal-close" onclick="closeScrapboardCatalogEditor()" aria-label="Close">×</button></div><div class="form-grid"><div class="field span-2"><label for="scrap_category_label">Category name</label><input id="scrap_category_label" maxlength="80" value="${esc(category.label)}"></div></div><p class="form-note">Deactivating this category hides all its items from new buying transactions without changing past records.</p><div class="form-actions scrap-catalog-modal-actions">${scrapboardCategoryCanDelete(category.key)?`<button type="button" class="btn danger" onclick="confirmDeleteScrapboardCategory('${token}')">Delete permanently</button>`:''}<button type="button" class="btn secondary" onclick="toggleScrapboardCategory('${token}')">${toggleLabel}</button><button type="button" class="btn" onclick="saveScrapboardCategoryEditor('${token}')">Save category</button></div></div>`;
+  const token=catalogActionToken(category.key);
+  return `<div class="edit-modal scrap-catalog-modal" role="dialog" aria-modal="true" aria-labelledby="scrap_catalog_editor_title"><div class="summary-modal-head"><div><div class="eyebrow">Catalog management</div><h2 id="scrap_catalog_editor_title">Edit category</h2></div><button type="button" class="modal-close" onclick="closeScrapboardCatalogEditor()" aria-label="Close">×</button></div><div class="form-grid"><div class="field span-2"><label for="scrap_category_label">Category name</label><input id="scrap_category_label" maxlength="80" value="${esc(category.label)}"></div></div><p class="form-note">Removing this category hides all its items from Daily Rates and new buying transactions without changing past records.</p><div class="form-actions scrap-catalog-modal-actions">${scrapboardCategoryCanDelete(category.key)?`<button type="button" class="btn danger" onclick="confirmDeleteScrapboardCategory('${token}')">Delete permanently</button>`:''}${category.active?`<button type="button" class="btn danger" onclick="confirmRemoveScrapboardCategory('${token}')">Remove category</button>`:`<button type="button" class="btn secondary" onclick="restoreScrapboardCategory('${token}')">Restore category</button>`}<button type="button" class="btn" onclick="saveScrapboardCategoryEditor('${token}')">Save category</button></div></div>`;
 }
 function scrapboardItemEditorMarkup(key){
   const item=scrapboardItems(true).find(entry=>entry.key===key);
   if(!item) return '';
   const categoryKey=scrapboardItemCategoryKey(key),token=catalogActionToken(key),toggleLabel=item.ownActive?'Deactivate':'Activate';
   const categories=scrapboardCategoryEntries(true);
-  return `<div class="edit-modal scrap-catalog-modal" role="dialog" aria-modal="true" aria-labelledby="scrap_item_editor_title"><div class="summary-modal-head"><div><div class="eyebrow">Catalog management</div><h2 id="scrap_item_editor_title">Edit item</h2></div><button type="button" class="modal-close" onclick="closeScrapboardCatalogEditor()" aria-label="Close">×</button></div><div class="form-grid"><div class="field span-2"><label for="scrap_item_label">Item name</label><input id="scrap_item_label" maxlength="100" value="${esc(item.label)}"></div><div class="field"><label for="scrap_item_category">Category</label><select id="scrap_item_category">${categories.map(category=>`<option value="${esc(category.key)}" ${category.key===categoryKey?'selected':''}>${esc(category.label)}${category.active?'':' (inactive)'}</option>`).join('')}</select></div><div class="field"><label for="scrap_item_unit">Buying unit</label><select id="scrap_item_unit"><option value="kg" ${item.unit==='kg'?'selected':''}>kg</option><option value="pc" ${item.unit==='pc'?'selected':''}>pc</option></select></div></div><p class="form-note">Deactivated items remain available in transaction history but cannot be selected for new purchases.</p><div class="form-actions scrap-catalog-modal-actions">${scrapboardItemCanDelete(key)?`<button type="button" class="btn danger" onclick="confirmDeleteScrapboardItem('${token}')">Delete permanently</button>`:''}<button type="button" class="btn secondary" onclick="toggleScrapboardItem('${token}')">${toggleLabel}</button><button type="button" class="btn" onclick="saveScrapboardItemEditor('${token}')">Save item</button></div></div>`;
+  return `<div class="edit-modal scrap-catalog-modal" role="dialog" aria-modal="true" aria-labelledby="scrap_item_editor_title"><div class="summary-modal-head"><div><div class="eyebrow">Catalog management</div><h2 id="scrap_item_editor_title">Edit item</h2></div><button type="button" class="modal-close" onclick="closeScrapboardCatalogEditor()" aria-label="Close">×</button></div><div class="form-grid"><div class="field span-2"><label for="scrap_item_label">Item name</label><input id="scrap_item_label" maxlength="100" value="${esc(item.label)}"></div><div class="field"><label for="scrap_item_category">Category</label><select id="scrap_item_category">${scrapboardCategoryOptions(categories,categoryKey)}</select></div><div class="field"><label for="scrap_item_unit">Buying unit</label><select id="scrap_item_unit"><option value="kg" ${item.unit==='kg'?'selected':''}>kg</option><option value="pc" ${item.unit==='pc'?'selected':''}>pc</option></select></div></div><p class="form-note">Deactivated items remain available in transaction history but cannot be selected for new purchases.</p><div class="form-actions scrap-catalog-modal-actions">${scrapboardItemCanDelete(key)?`<button type="button" class="btn danger" onclick="confirmDeleteScrapboardItem('${token}')">Delete permanently</button>`:''}<button type="button" class="btn secondary" onclick="toggleScrapboardItem('${token}')">${toggleLabel}</button><button type="button" class="btn" onclick="saveScrapboardItemEditor('${token}')">Save item</button></div></div>`;
 }
 function closeScrapboardCatalogEditor(){ document.getElementById('scrapboard_catalog_editor')?.remove(); }
 function openScrapboardCatalogModal(markup){
@@ -1194,6 +1216,15 @@ async function toggleScrapboardCategory(token){
   const key=decodeURIComponent(token),category=scrapboardCategoryEntry(key,true);if(!category)return;
   if(!await editScrapboardCategory(key,{label:category.label,active:!category.active})){toast('Category status was not changed');return;}
   closeScrapboardCatalogEditor();render();toast(`Category ${category.active?'deactivated':'activated'}`);
+}
+async function confirmRemoveScrapboardCategory(token){
+  const key=decodeURIComponent(token),category=scrapboardCategoryEntry(key,true);if(!category||!category.active)return;
+  if(!confirm(`Remove “${category.label}” from Daily Rates and Buying? Past transaction records will stay unchanged.`))return;
+  await toggleScrapboardCategory(token);
+}
+async function restoreScrapboardCategory(token){
+  const key=decodeURIComponent(token),category=scrapboardCategoryEntry(key,true);if(!category||category.active)return;
+  await toggleScrapboardCategory(token);
 }
 async function saveScrapboardItemEditor(token){
   const key=decodeURIComponent(token),item=scrapboardItems(true).find(entry=>entry.key===key),label=normalizedCatalogName(val('scrap_item_label')),group=val('scrap_item_category'),unit=val('scrap_item_unit');
@@ -1222,11 +1253,11 @@ function renderRates(){
   const sections=scrapboardRateSections(Object.entries(groups));
   return `<section class="scrap-rate-hero">
     <div><div class="eyebrow">SCRAPBOARD BUYING GUIDE</div><h2>Daily buying rates</h2><p>These are the active prices used automatically on the Buying page. Rates marked / kg use kilograms; rates marked / pc use individual pieces.</p></div>
-    <div class="scrap-rate-hero-tools"><div class="scrap-rate-date"><small>Effective date</small><br><strong>${fmtDate(db.pricing.effectiveDate||todayStr())}</strong></div>${renderScrapboardRateDownloadButtons()}</div>
+    <div class="scrap-rate-hero-tools"><div class="scrap-rate-date"><small>Effective date</small><br><strong>${fmtDate(db.pricing.effectiveDate||todayStr())}</strong></div>${renderScrapboardRateDownloadButtons()}<label class="scrap-rate-sort"><span>Arrange by price</span><select onchange="setScrapboardRateSort(this.value)"><option value="catalog" ${scrapboardRateSort==='catalog'?'selected':''}>Default order</option><option value="high" ${scrapboardRateSort==='high'?'selected':''}>Highest to lowest</option><option value="low" ${scrapboardRateSort==='low'?'selected':''}>Lowest to highest</option></select></label></div>
   </section>
   ${isAdmin()?`<section class="scrap-quick-add"><div><div class="eyebrow">Quick add</div><h2>Add categories and buying items</h2><p>New items are saved to the shared rate list and appear automatically on the Buying page.</p></div><div class="scrap-quick-add-grid">
     <div class="scrap-quick-add-form"><h3>New category</h3><div class="field"><label for="quick_add_category_name">Category name</label><input id="quick_add_category_name" maxlength="80" placeholder="e.g. Charger boards"></div><button class="btn secondary small" type="button" onclick="submitScrapboardCategory()">Add category</button></div>
-    <div class="scrap-quick-add-form"><h3>New item</h3><div class="field"><label for="quick_add_item_category">Category</label><select id="quick_add_item_category">${scrapboardCategoryEntries().map(category=>`<option value="${esc(category.key)}">${esc(category.label)}</option>`).join('')}</select></div><div class="field"><label for="quick_add_item_name">Item name</label><input id="quick_add_item_name" maxlength="100" placeholder="e.g. Type-C port"></div><div class="scrap-quick-add-row"><div class="field"><label for="quick_add_item_unit">Unit</label><select id="quick_add_item_unit"><option value="kg">kg</option><option value="pc">pc</option></select></div><div class="field"><label for="quick_add_item_rate">Starting rate</label><input id="quick_add_item_rate" type="number" min="1" step="1" placeholder="0"></div></div><button class="btn secondary small" type="button" onclick="submitScrapboardItem()">Add item</button></div>
+    <div class="scrap-quick-add-form"><h3>New item</h3><div class="field"><label for="quick_add_item_category">Category</label><select id="quick_add_item_category">${scrapboardCategoryOptions(scrapboardCategoryEntries())}</select></div><div class="field"><label for="quick_add_item_name">Item name</label><input id="quick_add_item_name" maxlength="100" placeholder="e.g. Type-C port"></div><div class="scrap-quick-add-row"><div class="field"><label for="quick_add_item_unit">Unit</label><select id="quick_add_item_unit"><option value="kg">kg</option><option value="pc">pc</option></select></div><div class="field"><label for="quick_add_item_rate">Starting rate</label><input id="quick_add_item_rate" type="number" min="1" step="1" placeholder="0"></div></div><button class="btn secondary small" type="button" onclick="submitScrapboardItem()">Add item</button></div>
   </div></section>${scrapboardCatalogManagementMarkup()}`:''}
   ${sections.map(section=>`<section class="scrap-rate-section"><h3>${esc(section.label)}</h3>${section.groups.map(group=>`<div class="scrap-rate-subsection">${group.label?`<h4>${esc(group.label)}</h4>`:''}<div class="scrap-rate-grid">
     ${group.items.map(item=>`<div class="scrap-rate-card"><div><label for="scrap_rate_${item.key}">${esc(item.label)}</label><small>Philippine peso / ${item.unit}</small></div><div class="scrap-rate-input"><span>₱</span><input id="scrap_rate_${item.key}" type="number" min="1" step="1" value="${roundPeso(db.pricing.scrapboardRates?.[item.key]||item.rate)}" ${editable?'':'readonly aria-readonly="true"'}></div></div>`).join('')}
