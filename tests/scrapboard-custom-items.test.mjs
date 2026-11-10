@@ -51,6 +51,12 @@ async function loadCustomItemApi() {
       editItem: (key, changes) => editScrapboardItem(key, changes),
       deleteCategory: key => deleteScrapboardCategory(key),
       deleteItem: key => deleteScrapboardItem(key),
+      loadLegacyIcSettings: () => {
+        db.pricing.scrapboardCategorySettings = { 'IC Chips · EMCP': { label: 'EMCP', active: true } };
+        db.pricing.scrapboardItemSettings = { A5: { label: 'A5', group: 'IC Chips · EMCP', unit: 'kg', active: true } };
+        ensureShape();
+        return JSON.parse(JSON.stringify({ categories: db.pricing.scrapboardCategorySettings, items: db.pricing.scrapboardItemSettings }));
+      },
       referenceItem: key => { db.stock.push({ id: 'stock-reference', metal: 'Scrapboard', karat: key }); }
     };`, context);
   return context.customItemApi;
@@ -62,6 +68,16 @@ test('custom scrapboard catalog and management interfaces are available', async 
     catalog: true, addCategory: true, addItem: true,
     editCategory: true, editItem: true, deleteCategory: true, deleteItem: true
   });
+});
+
+test('legacy EMCP settings migrate before saving a kg item as pc', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  const migrated = api.loadLegacyIcSettings();
+  assert.equal(migrated.categories['IC Chips · EMCP'], undefined);
+  assert.equal(migrated.items.A5.group, 'IC Chips · Coded');
+  assert.equal(await api.editItem('A5', { label: 'A5', group: 'IC Chips · Coded', unit: 'pc', active: true }), true);
+  assert.equal(api.catalog(true).find(item => item.key === 'A5').unit, 'pc');
 });
 
 test('admin can rename and deactivate a built-in category without losing historical item labels', async () => {
