@@ -228,6 +228,19 @@ test('Daily Rates renders compact category and item management only for administ
   assert.doesNotMatch(staffHtml, /Catalog management|Manage category|Edit item/);
 });
 
+test('Catalog management hides custom internal keys below item names', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  await api.addCategory('Visible Names');
+  await api.addItem('Visible Names', 'Repeated Name', 'pc', 25);
+  const customKey = api.customItems()[0].key;
+
+  const html = api.renderRates();
+  assert.match(html, /<strong>Repeated Name<\/strong>[^]*<small>pc<\/small>/);
+  assert.doesNotMatch(html, new RegExp(`<small>pc · ${customKey}<\\/small>`));
+  assert.match(html, new RegExp(`openScrapboardItemEditor\\('${customKey}'\\)`));
+});
+
 test('Catalog management is expandable and stays minimized until the administrator opens it', async () => {
   const api = await loadCustomItemApi();
   api.setAdmin();
