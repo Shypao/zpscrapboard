@@ -442,19 +442,19 @@ const PLATINUM_GRADES = [
     { key: '850', label: '850', mult: 850 / 999 },
 ];
 const SCRAPBOARD_ITEMS = [
-    { key: 'A6', label: 'A6', rate: 1500, unit: 'kg', group: 'IC Chips · Coded' },
-    { key: 'A5', label: 'A5', rate: 1400, unit: 'kg', group: 'IC Chips · Coded' },
-    { key: 'A4', label: 'A4', rate: 1000, unit: 'kg', group: 'IC Chips · Coded' },
-    { key: 'A3', label: 'A3', rate: 700, unit: 'kg', group: 'IC Chips · Coded' },
-    { key: 'A2', label: 'A2', rate: 300, unit: 'kg', group: 'IC Chips · Coded' },
-    { key: 'A1', label: 'A1', rate: 140, unit: 'kg', group: 'IC Chips · Coded' },
-    { key: 'NC512', label: 'NC 512', rate: 1370, unit: 'kg', group: 'IC Chips · Non-Coded' },
-    { key: 'NC256', label: 'NC 256', rate: 950, unit: 'kg', group: 'IC Chips · Non-Coded' },
-    { key: 'NC128', label: 'NC 128', rate: 700, unit: 'kg', group: 'IC Chips · Non-Coded' },
-    { key: 'NC64', label: 'NC 64', rate: 500, unit: 'kg', group: 'IC Chips · Non-Coded' },
-    { key: 'NC32', label: 'NC 32', rate: 250, unit: 'kg', group: 'IC Chips · Non-Coded' },
-    { key: 'NC16', label: 'NC 16', rate: 50, unit: 'kg', group: 'IC Chips · Non-Coded' },
-    { key: 'NC8', label: 'NC 8', rate: 45, unit: 'kg', group: 'IC Chips · Non-Coded' },
+    { key: 'A6', label: 'A6', rate: 1500, unit: 'kg', group: 'IC Chips · EMCP' },
+    { key: 'A5', label: 'A5', rate: 1400, unit: 'kg', group: 'IC Chips · EMCP' },
+    { key: 'A4', label: 'A4', rate: 1000, unit: 'kg', group: 'IC Chips · EMCP' },
+    { key: 'A3', label: 'A3', rate: 700, unit: 'kg', group: 'IC Chips · EMCP' },
+    { key: 'A2', label: 'A2', rate: 300, unit: 'kg', group: 'IC Chips · EMCP' },
+    { key: 'A1', label: 'A1', rate: 140, unit: 'kg', group: 'IC Chips · EMCP' },
+    { key: 'NC512', label: 'NC 512', rate: 1370, unit: 'kg', group: 'IC Chips · EMMC' },
+    { key: 'NC256', label: 'NC 256', rate: 950, unit: 'kg', group: 'IC Chips · EMMC' },
+    { key: 'NC128', label: 'NC 128', rate: 700, unit: 'kg', group: 'IC Chips · EMMC' },
+    { key: 'NC64', label: 'NC 64', rate: 500, unit: 'kg', group: 'IC Chips · EMMC' },
+    { key: 'NC32', label: 'NC 32', rate: 250, unit: 'kg', group: 'IC Chips · EMMC' },
+    { key: 'NC16', label: 'NC 16', rate: 50, unit: 'kg', group: 'IC Chips · EMMC' },
+    { key: 'NC8', label: 'NC 8', rate: 45, unit: 'kg', group: 'IC Chips · EMMC' },
     { key: 'AMINUS8G', label: 'A Minus (8g)', rate: 50, unit: 'pc', group: 'IC Chips · Other Codes' },
     { key: '6580_7731E_A1', label: '6580 / 7731E A1', rate: 130, unit: 'pc', group: 'IC Chips · Other Codes' },
     { key: '6580B', label: '6580 B', rate: 70, unit: 'pc', group: 'IC Chips · Other Codes' },
@@ -1465,7 +1465,11 @@ function scrapboardRateSections(entries = Object.entries(scrapboardRateGroups())
                 icSection = { label: 'IC Chips', groups: [] };
                 sections.push(icSection);
             }
-            icSection.groups.push({ label: subcategory, items: sortedScrapboardRateItems(items) });
+            const existing = icSection.groups.find(entry => entry.label.toLowerCase() === subcategory.toLowerCase());
+            if (existing)
+                existing.items = sortedScrapboardRateItems([...existing.items, ...items]);
+            else
+                icSection.groups.push({ label: subcategory, items: sortedScrapboardRateItems(items) });
             return;
         }
         sections.push({ label: group, groups: [{ label: '', items: sortedScrapboardRateItems(items) }] });
