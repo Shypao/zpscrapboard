@@ -40,6 +40,19 @@ async function loadCustomItemApi() {
       itemEditor: key => scrapboardItemEditorMarkup(key),
       setCatalogExpanded: value => rememberScrapboardCatalogExpanded(value),
       setRateSort: value => { scrapboardRateSort = value; },
+      selectBuyingItemWithDom: (key, current = 'NC512') => {
+        const elements = {
+          b_karat: { value: current, type: 'hidden' },
+          b_rate: { value: '1370', type: 'number' },
+          b_gross: { value: '32', type: 'number' },
+          scrap_unit: { textContent: '' }
+        };
+        document.getElementById = id => elements[id] || null;
+        scheduleBuyingDraftSave = () => captureBuyingDraftForm();
+        render = () => {};
+        handleScrapboardItemChange(key);
+        return { selected: elements.b_karat.value, draft: buyingDraftForm.b_karat, rate: elements.b_rate.value, unit: elements.scrap_unit.textContent };
+      },
       lookup: key => ({ ...scrapboardItem(key) }),
       label: key => gradeLabel('Scrapboard', key),
       activeRate: key => ({ ...activeRate('Scrapboard', key) }),
@@ -485,6 +498,13 @@ test('Buying falls back to the first active item when the saved selection is ina
   assert.match(html, /id="b_karat" type="hidden" value="NC512"/);
   assert.match(html, /data-selected-label="Non-Coded · NC 512"/);
   assert.match(html, /id="b_rate"[^>]*value="1370"/);
+});
+
+test('search selection updates the hidden classification before draft capture and rerender', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  const selected = api.selectBuyingItemWithDom('A6', 'NC512');
+  assert.deepEqual({ ...selected }, { selected: 'A6', draft: 'A6', rate: '1500', unit: 'kg' });
 });
 
 test('new custom item renders as a Daily Rates card in its category', async () => {

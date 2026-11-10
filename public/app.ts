@@ -5605,6 +5605,8 @@ function renderBuying(){
 function handleScrapboardItemChange(key){
   buyingDraftForm.b_karat=key;
   buyingDraftForm.b_rate_overridden='false';
+  const selection=document.getElementById('b_karat');
+  if(selection)selection.value=key;
   const item=scrapboardItem(key),active=activeRate('Scrapboard',key),rateInput=document.getElementById('b_rate'),unit=document.getElementById('scrap_unit');
   if(rateInput) rateInput.value=String(roundPeso(active?.rate||0));
   if(unit) unit.textContent=item.unit;
