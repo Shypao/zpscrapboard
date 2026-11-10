@@ -5446,6 +5446,45 @@ function purchaseQuantityLabel(item){
   const quantity=Number(item.purchaseQuantity??fallbackQuantity);
   return `${quantity.toLocaleString('en-PH',{maximumFractionDigits:2})} ${item.unit||'pc'}`;
 }
+function scrapboardBuyingSections(items=scrapboardItems()){
+  const sections=[];
+  const byLabel=new Map();
+  items.forEach(item=>{
+    const subcategory=scrapboardIcChipSubcategory(item.group);
+    const label=subcategory?'IC CHIP':item.group;
+    let section=byLabel.get(label);
+    if(!section){section={label,items:[]};byLabel.set(label,section);sections.push(section);}
+    section.items.push({...item,subcategory});
+  });
+  return sections;
+}
+function scrapboardBuyingSearchLabel(item){
+  const subcategory=scrapboardIcChipSubcategory(item.group);
+  return `${subcategory?`${subcategory} · `:''}${item.label}`;
+}
+function setScrapboardBuyingCategory(token){
+  const label=decodeURIComponent(token);
+  const section=scrapboardBuyingSections().find(entry=>entry.label===label);
+  if(section?.items[0]) handleScrapboardItemChange(section.items[0].key);
+}
+function filterScrapboardBuyingItems(query=''){
+  const results=document.getElementById('b_item_search_results'),input=document.getElementById('b_item_search');
+  if(!results)return;
+  const normalized=String(query).trim().toLowerCase();
+  let visible=0;
+  results.querySelectorAll('[data-scrap-search-item]').forEach(option=>{
+    const matched=!normalized||String(option.textContent||'').toLowerCase().includes(normalized);
+    option.classList.toggle('is-hidden',!matched);if(matched)visible++;
+  });
+  results.querySelector('[data-scrap-search-empty]')?.classList.toggle('is-hidden',visible>0);
+  results.classList.remove('is-hidden');
+  input?.setAttribute('aria-expanded','true');
+}
+function openScrapboardBuyingSearch(input){ input.select();filterScrapboardBuyingItems(''); }
+function closeScrapboardBuyingSearchSoon(){
+  setTimeout(()=>{const results=document.getElementById('b_item_search_results'),input=document.getElementById('b_item_search');results?.classList.add('is-hidden');input?.setAttribute('aria-expanded','false');if(input)input.value=input.dataset.selectedLabel||'';},180);
+}
+function selectScrapboardBuyingItem(token){ handleScrapboardItemChange(decodeURIComponent(token)); }
 function renderBuying(){
   rollDefaultBuyingDraftDateForward();
   const activeItems=scrapboardItems();
@@ -5461,7 +5500,9 @@ function renderBuying(){
   const rateOverrideAllowed=canOverrideBuyingRate(),savedOverride=rateOverrideAllowed&&buyingDraftForm.b_rate_overridden==='true';
   const rate=savedOverride&&enteredRate!==''&&Number.isFinite(parsedRate)?roundPeso(parsedRate):systemRate;
   const rateOverridden=savedOverride&&rate!==systemRate,suggested=roundPeso(quantity*rate);
-  const groups=scrapboardRateGroups();
+  const sections=scrapboardBuyingSections(activeItems);
+  const selectedSection=sections.find(section=>section.items.some(option=>option.key===key))||sections[0];
+  const selectedSearchLabel=scrapboardBuyingSearchLabel(item);
   return `<div id="buying_cashflow_card">${cashflowCardMarkup()}</div>
   <section class="block buying-workflow">
     <div class="buying-step" id="buying_customer_step"><div class="step-number">1</div><div class="step-content">
@@ -5476,7 +5517,8 @@ function renderBuying(){
       <h2>Add scrapboard item</h2><p>Choose the classification and enter the quantity. The active daily rate is applied automatically.</p>
       <div class="form-grid buying-item-grid">
         <input id="b_metal" type="hidden" value="Scrapboard"><input id="b_itemtype" type="hidden" value="Scrapboard"><input id="b_ded" type="hidden" value="0"><input id="b_status" type="hidden" value="Available">
-        <div class="field scrap-item-picker"><label for="b_karat">Scrapboard classification</label><select id="b_karat" onchange="handleScrapboardItemChange(this.value)">${Object.entries(groups).map(([group,items])=>`<optgroup label="${esc(group)}">${items.map(option=>`<option value="${option.key}" ${option.key===key?'selected':''}>${esc(option.label)} — ${fmtMoney(db.pricing.scrapboardRates?.[option.key]||option.rate)}/${option.unit}</option>`).join('')}</optgroup>`).join('')}</select></div>
+        <div class="field scrap-item-picker"><label>Scrapboard category</label><div class="scrap-category-choices" role="group" aria-label="Scrapboard categories">${sections.map(section=>`<button type="button" class="scrap-category-choice ${section.label===selectedSection.label?'is-active':''}" aria-pressed="${section.label===selectedSection.label}" onclick="setScrapboardBuyingCategory('${encodeURIComponent(section.label)}')"><span>${esc(section.label)}</span><small>${section.items.length}</small></button>`).join('')}</div></div>
+        <div class="field scrap-classification-search"><label for="b_item_search">Search classification</label><input id="b_karat" type="hidden" value="${esc(key)}"><div class="scrap-search-combobox"><input id="b_item_search" value="${esc(selectedSearchLabel)}" data-selected-label="${esc(selectedSearchLabel)}" placeholder="Type a classification" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="b_item_search_results" onfocus="openScrapboardBuyingSearch(this)" oninput="filterScrapboardBuyingItems(this.value)" onblur="closeScrapboardBuyingSearchSoon()"><div id="b_item_search_results" class="scrap-search-results is-hidden" role="listbox">${selectedSection.items.map(option=>`<button type="button" role="option" aria-selected="${option.key===key}" data-scrap-search-item onclick="selectScrapboardBuyingItem('${encodeURIComponent(option.key)}')"><span><strong>${esc(option.label)}</strong>${option.subcategory?`<small>${esc(option.subcategory)}</small>`:''}</span><b>${fmtMoney(db.pricing.scrapboardRates?.[option.key]||option.rate)}/${option.unit}</b></button>`).join('')}<div class="scrap-search-empty is-hidden" data-scrap-search-empty>No matching classification</div></div></div><span class="scrap-rate-note">Selected: ${esc(selectedSection.label)} · ${esc(selectedSearchLabel)}</span></div>
         <div class="field"><label for="b_gross">Quantity</label><div class="scrap-quantity-wrap"><input id="b_gross" type="number" min="0" step="${item.unit==='kg'?'0.01':'1'}" value="${esc(quantityValue)}" placeholder="0" oninput="recalcBuying();scheduleBuyingDraftSave()"><span class="scrap-unit" id="scrap_unit">${item.unit}</span></div><span class="scrap-rate-note">Rate is per ${item.unit==='kg'?'kilogram':'piece'}.</span></div>
       </div>
       <div class="payout-calculator">

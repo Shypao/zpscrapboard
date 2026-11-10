@@ -371,7 +371,7 @@ test('inactive definitions remain visible in management while disappearing from 
   assert.match(rates, /Catalog management/);
   assert.match(rates, /A6[^]*Inactive/);
   assert.doesNotMatch(rates, /id="scrap_rate_A6"/);
-  assert.doesNotMatch(api.renderBuying(), /option value="A6"/);
+  assert.doesNotMatch(api.renderBuying(), /selectScrapboardBuyingItem\('A6'\)/);
   assert.equal(api.exportRows().some(row => row.classification === 'A6'), false);
 });
 
@@ -452,7 +452,8 @@ test('Buying falls back to the first active item when the saved selection is ina
   await api.editCategory('IC chips · A series', { label: 'IC chips · A series', active: false });
 
   const html = api.renderBuying();
-  assert.match(html, /<option value="NC512" selected>NC 512/);
+  assert.match(html, /id="b_karat" type="hidden" value="NC512"/);
+  assert.match(html, /data-selected-label="NC series · NC 512"/);
   assert.match(html, /id="b_rate"[^>]*value="1370"/);
 });
 
@@ -498,7 +499,7 @@ test('scrapboard buying inventory and reports do not expose refining controls', 
   assert.doesNotMatch(visibleUi, /prepareInventoryForRefining/i);
 });
 
-test('custom item appears under its category on the Buying page', async () => {
+test('Buying uses category buttons and searchable classifications instead of a dropdown', async () => {
   const api = await loadCustomItemApi();
   api.setAdmin();
   await api.addCategory('Laptop IC');
@@ -506,11 +507,30 @@ test('custom item appears under its category on the Buying page', async () => {
 
   const custom = api.customItems()[0];
   const html = api.renderBuying();
-  assert.match(html, /<optgroup label="Laptop IC">/);
-  assert.match(html, new RegExp(`<option value="${custom.key}"[^>]*>EC Controller — PHP 75\\/pc<`));
+  assert.match(html, /Scrapboard category/);
+  assert.match(html, /class="scrap-category-choice/);
+  assert.match(html, /Search classification/);
+  assert.match(html, /id="b_item_search"/);
+  assert.match(html, /role="combobox"/);
+  assert.doesNotMatch(html, /<select id="b_karat"/);
+  assert.match(html, /onclick="setScrapboardBuyingCategory\('Laptop%20IC'\)"/);
   assert.deepEqual(api.lookup(custom.key), custom);
   assert.equal(api.label(custom.key), 'EC Controller');
   assert.deepEqual(JSON.parse(JSON.stringify(api.activeRate(custom.key))), { rate: 75, effectiveDate: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()), unit: 'pc' });
+});
+
+test('Buying combines every IC chip subcategory under one searchable IC CHIP category', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  await api.addCategory('IC CHIP • EMCP');
+  await api.addItem('IC CHIP • EMCP', 'A6 (512)', 'pc', 1500);
+
+  const html = api.renderBuying();
+  assert.equal((html.match(/>IC CHIP<\/span>/g) || []).length, 1);
+  assert.match(html, /A series/);
+  assert.match(html, /NC series/);
+  assert.match(html, /EMCP/);
+  assert.match(html, /filterScrapboardBuyingItems/);
 });
 
 test('daily-rate export rows include custom items', async () => {

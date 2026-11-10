@@ -2068,13 +2068,16 @@ test('buying form preserves an intentional per-item scrapboard rate override', a
   assert.match(html, /class="buying-rate is-overridden"/);
 });
 
-test('scrapboard buying page includes all supplied classifications', async () => {
+test('scrapboard buying page exposes category choices and searchable classifications', async () => {
   const api = await loadInventoryApi();
   api.setState(stateFixture());
 
   const html=api.renderBuying();
-  assert.match(html, /A6 — PHP 1,500\/kg/);
-  assert.match(html, /Nokia original buo — PHP 80\/pc/);
+  assert.match(html, /<strong>A6<\/strong><small>A series<\/small>/);
+  assert.match(html, /<b>PHP 1,500\/kg<\/b>/);
+  assert.match(html, /onclick="setScrapboardBuyingCategory\('Whole%20units'\)"/);
+  assert.match(html, /id="b_item_search"/);
+  assert.doesNotMatch(html, /<select id="b_karat"/);
 });
 
 test('daily rate setup shows editable scrapboard rates to administrators', async () => {
