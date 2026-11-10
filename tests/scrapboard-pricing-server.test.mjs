@@ -121,6 +121,23 @@ test('catalog management rejects duplicate normalized category labels', () => {
   assert.match(result.message, /duplicate category/i);
 });
 
+test('server migrates legacy IC category keys before catalog validation', () => {
+  const candidate = structuredClone(currentPricing);
+  candidate.scrapboardCategorySettings = { 'IC Chips · EMCP': { label: 'EMCP', active: true } };
+  candidate.scrapboardItemSettings = { A5: { label: 'A5', group: 'IC Chips · EMCP', unit: 'pc', active: true } };
+  const result = serverPricingProbe(`
+    const candidate = ${JSON.stringify(candidate)};
+    const migrated = server.migrateLegacyCatalogPricing(candidate);
+    let message = '';
+    try { server.validateCatalogManagementCandidate({ pricing: ${JSON.stringify(currentPricing)} }, migrated); } catch (error) { message = error.message; }
+    process.stdout.write(JSON.stringify({ message, categories: migrated.scrapboardCategorySettings, item: migrated.scrapboardItemSettings.A5 }));
+  `);
+  assert.equal(result.message, '');
+  assert.equal(result.categories['IC Chips · EMCP'], undefined);
+  assert.equal(result.item.group, 'IC Chips · Coded');
+  assert.equal(result.item.unit, 'pc');
+});
+
 test('catalog management rejects invalid custom item units and missing groups', () => {
   const candidate = structuredClone(currentPricing);
   candidate.customScrapboardItems = [{ key: 'CUSTOM_NEW', label: 'New', group: 'Missing group', unit: 'box', rate: 25 }];

@@ -104,6 +104,7 @@ function ensureShape(){
   db.pricing.customScrapboardItems=Array.isArray(db.pricing.customScrapboardItems)?db.pricing.customScrapboardItems:[];
   db.pricing.scrapboardCategorySettings=db.pricing.scrapboardCategorySettings&&typeof db.pricing.scrapboardCategorySettings==='object'?db.pricing.scrapboardCategorySettings:{};
   db.pricing.scrapboardItemSettings=db.pricing.scrapboardItemSettings&&typeof db.pricing.scrapboardItemSettings==='object'?db.pricing.scrapboardItemSettings:{};
+  migrateLegacyScrapboardCatalog(db.pricing);
   scrapboardItems().forEach(item=>{
     const saved=Number(db.pricing.scrapboardRates[item.key]);
     if(!Number.isFinite(saved)||saved<=0) db.pricing.scrapboardRates[item.key]=item.rate;
@@ -379,6 +380,35 @@ const SCRAPBOARD_ITEMS = [
   {key:'NOKIA_ORIG_BUO',label:'Nokia original buo',rate:80,unit:'pc',group:'Whole units'}
 ];
 const SCRAPBOARD_BY_KEY = Object.fromEntries(SCRAPBOARD_ITEMS.map(item=>[item.key,item]));
+const LEGACY_SCRAPBOARD_CATEGORY_MAP:Record<string,string>={
+  'ic chips · a series':'IC Chips · Coded','ic chips · emcp':'IC Chips · Coded',
+  'ic chips · nc series':'IC Chips · Non-Coded','ic chips · emmc':'IC Chips · Non-Coded',
+  'ic chips · phone processors':'IC Chips · Other','ic chips · keypad codes':'IC Chips · Other','ic chips · other codes':'IC Chips · Other'
+};
+function legacyScrapboardCategoryTarget(value){return LEGACY_SCRAPBOARD_CATEGORY_MAP[normalizedCatalogName(value).toLowerCase()]||'';}
+function migrateLegacyScrapboardCatalog(pricing){
+  if(!pricing||typeof pricing!=='object')return;
+  const customCategories=Array.isArray(pricing.customScrapboardCategories)?pricing.customScrapboardCategories.map(String):[];
+  const validCategories=new Set([...SCRAPBOARD_ITEMS.map(item=>item.group),...customCategories]);
+  const categorySettings=pricing.scrapboardCategorySettings&&typeof pricing.scrapboardCategorySettings==='object'?pricing.scrapboardCategorySettings:{};
+  const migratedCategorySettings:Record<string,any>={};
+  Object.entries(categorySettings).forEach(([key,value])=>{
+    if(validCategories.has(key)){migratedCategorySettings[key]=value;return;}
+    const target=legacyScrapboardCategoryTarget(key);
+    if(target&&!migratedCategorySettings[target]&&value&&typeof value==='object')migratedCategorySettings[target]={active:value.active!==false};
+  });
+  pricing.scrapboardCategorySettings=migratedCategorySettings;
+  pricing.customScrapboardItems=(Array.isArray(pricing.customScrapboardItems)?pricing.customScrapboardItems:[]).map(item=>{
+    const target=!validCategories.has(String(item.group||''))?legacyScrapboardCategoryTarget(item.group):'';
+    return target?{...item,group:target}:item;
+  });
+  const itemSettings=pricing.scrapboardItemSettings&&typeof pricing.scrapboardItemSettings==='object'?pricing.scrapboardItemSettings:{};
+  pricing.scrapboardItemSettings=Object.fromEntries(Object.entries(itemSettings).map(([key,value])=>{
+    if(!value||typeof value!=='object')return [key,value];
+    const group=String(value.group||''),target=group&&!validCategories.has(group)?legacyScrapboardCategoryTarget(group):'';
+    return [key,target?{...value,group:target}:value];
+  }));
+}
 function rawScrapboardItems(){
   const custom=Array.isArray(db.pricing?.customScrapboardItems)?db.pricing.customScrapboardItems:[];
   return [...SCRAPBOARD_ITEMS,...custom];

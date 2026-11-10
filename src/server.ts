@@ -144,6 +144,33 @@ function pricingCatalogSettings(pricing: PricingSettings | null, key: 'scrapboar
 }
 
 function normalizedCatalogLabel(value:unknown):string{return String(value??'').trim().replace(/\s+/g,' ');}
+const LEGACY_SCRAPBOARD_CATEGORY_MAP:Record<string,string>={
+  'ic chips · a series':'IC Chips · Coded','ic chips · emcp':'IC Chips · Coded',
+  'ic chips · nc series':'IC Chips · Non-Coded','ic chips · emmc':'IC Chips · Non-Coded',
+  'ic chips · phone processors':'IC Chips · Other','ic chips · keypad codes':'IC Chips · Other','ic chips · other codes':'IC Chips · Other'
+};
+function legacyScrapboardCategoryTarget(value:unknown):string{return LEGACY_SCRAPBOARD_CATEGORY_MAP[normalizedCatalogLabel(value).toLowerCase()]??'';}
+export function migrateLegacyCatalogPricing(pricing:PricingSettings):PricingSettings{
+  const record=pricing as Record<string,any>,customCategories=pricingCustomCategories(pricing);
+  const validCategories=new Set([...DEFAULT_SCRAPBOARD_ITEMS.map(item=>item.group),...customCategories]);
+  const categorySettings=pricingCatalogSettings(pricing,'scrapboardCategorySettings'),migratedCategorySettings:Record<string,any>={};
+  for(const [key,value] of Object.entries(categorySettings)){
+    if(validCategories.has(key)){migratedCategorySettings[key]=value;continue;}
+    const target=legacyScrapboardCategoryTarget(key);
+    if(target&&!migratedCategorySettings[target])migratedCategorySettings[target]={active:value?.active!==false};
+  }
+  record.scrapboardCategorySettings=migratedCategorySettings;
+  record.customScrapboardItems=pricingCustomItems(pricing).map(item=>{
+    const group=String(item.group||''),target=!validCategories.has(group)?legacyScrapboardCategoryTarget(group):'';
+    return target?{...item,group:target}:item;
+  });
+  const itemSettings=pricingCatalogSettings(pricing,'scrapboardItemSettings');
+  record.scrapboardItemSettings=Object.fromEntries(Object.entries(itemSettings).map(([key,value])=>{
+    const group=String(value?.group||''),target=group&&!validCategories.has(group)?legacyScrapboardCategoryTarget(group):'';
+    return [key,target?{...value,group:target}:value];
+  }));
+  return pricing;
+}
 function stateReferencesCatalogKey(state:Record<string,any>,key:string):boolean{
   const visit=(value:unknown):boolean=>value===key||(Array.isArray(value)?value.some(visit):Boolean(value&&typeof value==='object'&&Object.values(value as Record<string,unknown>).some(visit)));
   return Object.entries(state).some(([name,value])=>name!=='pricing'&&name!=='pricingHistory'&&visit(value));
@@ -1236,7 +1263,7 @@ export async function requestHandler(request: IncomingMessage, response: ServerR
       if((scope==='catalog'||scope==='catalog-management')&&user!.role!=='admin')return sendJson(response,403,{error:'Only administrators can manage categories or items'});
       const expectedRevision=Number(body.revision);
       assertPricingRevision(expectedRevision,Number(current._revision||0));
-      const candidatePricing = isolatedPricingUpdate(current.pricing, pricing as PricingSettings, scope);
+      const candidatePricing = migrateLegacyCatalogPricing(isolatedPricingUpdate(current.pricing, pricing as PricingSettings, scope));
       if(scope==='catalog'||scope==='catalog-management')validateCatalogManagementCandidate(current as unknown as Record<string,any>,candidatePricing);
       const nextPricing = user!.role === 'admin'
         ? candidatePricing
