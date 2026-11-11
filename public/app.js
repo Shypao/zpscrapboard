@@ -545,10 +545,11 @@ function catalogOwnSetting(settings, key) {
 function scrapboardCategoryEntries(includeInactive = false) {
     const settings = db.pricing?.scrapboardCategorySettings || {};
     const custom = new Set((db.pricing?.customScrapboardCategories || []).map(value => String(value)));
-    return rawScrapboardCategories().map(key => {
+    return rawScrapboardCategories().map((key, index) => {
         const setting = catalogOwnSetting(settings, key);
-        return { key, label: normalizedCatalogName(setting.label) || key, active: setting.active !== false, custom: custom.has(key) };
-    }).filter(category => includeInactive || category.active);
+        const configuredOrder = Number(setting.order), order = Number.isInteger(configuredOrder) && configuredOrder >= 0 ? configuredOrder : index;
+        return { key, label: normalizedCatalogName(setting.label) || key, active: setting.active !== false, custom: custom.has(key), order, rawOrder: index };
+    }).filter(category => includeInactive || category.active).sort((a, b) => a.order - b.order || a.rawOrder - b.rawOrder).map(({ order, rawOrder, ...category }) => category);
 }
 function scrapboardCategoryEntry(value, includeInactive = true) {
     const normalized = normalizedCatalogName(value).toLowerCase();
@@ -558,16 +559,19 @@ function scrapboardCategoryEntry(value, includeInactive = true) {
 function scrapboardCategories(includeInactive = false) { return scrapboardCategoryEntries(includeInactive).map(category => category.label); }
 function scrapboardItems(includeInactive = false) {
     const itemSettings = db.pricing?.scrapboardItemSettings || {};
-    return rawScrapboardItems().map(item => {
+    const categoryOrder = new Map(scrapboardCategoryEntries(true).map((category, index) => [category.key, index]));
+    return rawScrapboardItems().map((item, index) => {
         const setting = catalogOwnSetting(itemSettings, item.key);
         const category = scrapboardCategoryEntry(setting.group || item.group, true) || scrapboardCategoryEntry(item.group, true);
         const ownActive = setting.active !== false, active = ownActive && category?.active !== false;
-        const resolved = { ...item, label: normalizedCatalogName(setting.label) || item.label, unit: ['kg', 'pc'].includes(setting.unit) ? setting.unit : item.unit, group: category?.label || item.group };
+        const configuredOrder = Number(setting.order), order = Number.isInteger(configuredOrder) && configuredOrder >= 0 ? configuredOrder : index;
+        const resolved = { ...item, label: normalizedCatalogName(setting.label) || item.label, unit: ['kg', 'pc'].includes(setting.unit) ? setting.unit : item.unit, group: category?.label || item.group, categoryKey: category?.key || item.group, order, rawOrder: index };
         return { ...resolved, ownActive, active };
-    }).filter(item => includeInactive || item.active).map(item => {
+    }).filter(item => includeInactive || item.active).sort((a, b) => (categoryOrder.get(a.categoryKey) ?? 999) - (categoryOrder.get(b.categoryKey) ?? 999) || a.order - b.order || a.rawOrder - b.rawOrder).map(item => {
+        const { categoryKey, order, rawOrder, ...orderedItem } = item;
         if (includeInactive)
-            return item;
-        const { active, ownActive, ...resolved } = item;
+            return orderedItem;
+        const { active, ownActive, ...resolved } = orderedItem;
         return resolved;
     });
 }
@@ -667,7 +671,8 @@ function editScrapboardCategory(key, changes) {
         if (scrapboardCategoryEntries(true).some(entry => entry.key !== category.key && entry.label.toLowerCase() === label.toLowerCase()))
             return false;
         const before = catalogPricingSnapshot();
-        db.pricing.scrapboardCategorySettings = { ...(db.pricing.scrapboardCategorySettings || {}), [category.key]: { label, active: changes?.active !== false } };
+        const currentSetting = catalogOwnSetting(db.pricing.scrapboardCategorySettings || {}, category.key);
+        db.pricing.scrapboardCategorySettings = { ...(db.pricing.scrapboardCategorySettings || {}), [category.key]: { ...currentSetting, label, active: changes?.active !== false } };
         if (await savePricingDB(false, 'catalog-management'))
             return true;
         restoreCatalogPricing(before);
@@ -683,7 +688,9 @@ function editScrapboardItem(key, changes) {
         if (!current || !category || !label || !['kg', 'pc'].includes(unit))
             return false;
         const before = catalogPricingSnapshot();
-        db.pricing.scrapboardItemSettings = { ...(db.pricing.scrapboardItemSettings || {}), [key]: { label, group: category.key, unit, active: changes?.active !== false } };
+        const currentSetting = catalogOwnSetting(db.pricing.scrapboardItemSettings || {}, key), currentCategory = scrapboardItemCategoryKey(key);
+        const order = currentCategory === category.key ? currentSetting.order : scrapboardCategoryItems(category.key).length;
+        db.pricing.scrapboardItemSettings = { ...(db.pricing.scrapboardItemSettings || {}), [key]: { ...currentSetting, label, group: category.key, unit, active: changes?.active !== false, ...(order === undefined ? {} : { order }) } };
         if (await savePricingDB(false, 'catalog-management'))
             return true;
         restoreCatalogPricing(before);
@@ -1519,6 +1526,44 @@ function scrapboardCategoryOptions(categories, selectedKey = '') {
     const otherCategories = categories.filter(category => !scrapboardIcChipSubcategory(category.label));
     return `${icCategories.length ? `<optgroup label="IC Chips">${icCategories.map(option).join('')}</optgroup>` : ''}${otherCategories.map(option).join('')}`;
 }
+const QUICK_ADD_IC_CHIPS_CATEGORY = '__IC_CHIPS__';
+function canonicalScrapboardIcChipSubcategory(value) {
+    const normalized = normalizedCatalogName(value).toLowerCase();
+    if (['emcp', 'coded'].includes(normalized))
+        return 'Coded';
+    if (['emmc', 'non-coded', 'non coded'].includes(normalized))
+        return 'Non-Coded';
+    if (['other', 'other codes'].includes(normalized))
+        return 'Other';
+    return normalizedCatalogName(value);
+}
+function quickAddScrapboardIcCategories() {
+    const categories = new Map();
+    scrapboardCategoryEntries().forEach(category => {
+        const rawSubcategory = scrapboardIcChipSubcategory(category.key) || scrapboardIcChipSubcategory(category.label);
+        if (!rawSubcategory)
+            return;
+        const label = canonicalScrapboardIcChipSubcategory(rawSubcategory), existing = categories.get(label);
+        const isCanonicalKey = category.key === `IC Chips · ${label}`;
+        if (!existing || isCanonicalKey)
+            categories.set(label, { key: category.key, label });
+    });
+    return ['Coded', 'Non-Coded', 'Other'].map(label => categories.get(label)).filter(Boolean);
+}
+function scrapboardQuickAddCategoryOptions() {
+    const entries = scrapboardCategoryEntries(), hasIcChips = entries.some(category => scrapboardIcChipSubcategory(category.key) || scrapboardIcChipSubcategory(category.label));
+    const otherCategories = entries.filter(category => !scrapboardIcChipSubcategory(category.key) && !scrapboardIcChipSubcategory(category.label));
+    return `${hasIcChips ? `<option value="${QUICK_ADD_IC_CHIPS_CATEGORY}">IC Chips</option>` : ''}${otherCategories.map(category => `<option value="${esc(category.key)}">${esc(category.label)}</option>`).join('')}`;
+}
+function scrapboardQuickAddSubcategoryOptions() { return quickAddScrapboardIcCategories().map(category => `<option value="${esc(category.key)}">${esc(category.label)}</option>`).join(''); }
+function syncQuickAddScrapboardSubcategory() {
+    const category = val('quick_add_item_category'), field = document.getElementById('quick_add_item_subcategory_field'), select = document.getElementById('quick_add_item_subcategory');
+    const show = category === QUICK_ADD_IC_CHIPS_CATEGORY;
+    if (field)
+        field.hidden = !show;
+    if (select)
+        select.disabled = !show;
+}
 function scrapboardRateSections(entries = Object.entries(scrapboardRateGroups())) {
     const sections = [];
     let icSection = null;
@@ -1552,11 +1597,88 @@ function scrapboardItemCanDelete(key) {
 }
 let scrapboardCatalogExpanded = false;
 function rememberScrapboardCatalogExpanded(expanded) { scrapboardCatalogExpanded = Boolean(expanded); }
+let scrapboardCatalogDrag = null;
+function startScrapboardCatalogDrag(event, type, token, groupToken = '') {
+    if (!isAdmin())
+        return;
+    event.stopPropagation();
+    scrapboardCatalogDrag = { type, key: decodeURIComponent(token), group: groupToken ? decodeURIComponent(groupToken) : '' };
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', `${type}:${token}`);
+    event.currentTarget.closest(type === 'category' ? '.scrap-catalog-group' : '.scrap-catalog-item')?.classList.add('is-dragging');
+}
+function overScrapboardCatalogDrop(event, type) {
+    if (scrapboardCatalogDrag?.type !== type)
+        return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = 'move';
+    event.currentTarget.classList.add('is-drag-over');
+}
+function leaveScrapboardCatalogDrop(event) { event.currentTarget.classList.remove('is-drag-over'); }
+function endScrapboardCatalogDrag() {
+    scrapboardCatalogDrag = null;
+    document.querySelectorAll('.scrap-catalog-group.is-dragging,.scrap-catalog-item.is-dragging,.is-drag-over').forEach(element => element.classList.remove('is-dragging', 'is-drag-over'));
+}
+function reorderScrapboardCatalog(type, sourceKey, targetKey, groupKey = '') {
+    return queueScrapboardCatalogMutation(async () => {
+        if (!isAdmin() || sourceKey === targetKey)
+            return false;
+        const before = catalogPricingSnapshot();
+        if (type === 'category') {
+            const keys = scrapboardCategoryEntries(true).map(category => category.key), sourceIndex = keys.indexOf(sourceKey), targetIndex = keys.indexOf(targetKey);
+            if (sourceIndex < 0 || targetIndex < 0)
+                return false;
+            keys.splice(sourceIndex, 1);
+            keys.splice(targetIndex, 0, sourceKey);
+            const settings = { ...(db.pricing.scrapboardCategorySettings || {}) };
+            keys.forEach((key, order) => { settings[key] = { ...catalogOwnSetting(settings, key), order }; });
+            db.pricing.scrapboardCategorySettings = settings;
+        }
+        else if (type === 'item') {
+            if (!groupKey || scrapboardItemCategoryKey(sourceKey) !== groupKey || scrapboardItemCategoryKey(targetKey) !== groupKey)
+                return false;
+            const keys = scrapboardCategoryItems(groupKey).map(item => item.key), sourceIndex = keys.indexOf(sourceKey), targetIndex = keys.indexOf(targetKey);
+            if (sourceIndex < 0 || targetIndex < 0)
+                return false;
+            keys.splice(sourceIndex, 1);
+            keys.splice(targetIndex, 0, sourceKey);
+            const settings = { ...(db.pricing.scrapboardItemSettings || {}) };
+            keys.forEach((key, order) => { settings[key] = { ...catalogOwnSetting(settings, key), order }; });
+            db.pricing.scrapboardItemSettings = settings;
+        }
+        else
+            return false;
+        if (await savePricingDB(false, 'catalog-management'))
+            return true;
+        restoreCatalogPricing(before);
+        return false;
+    });
+}
+async function dropScrapboardCatalog(event, type, targetToken, groupToken = '') {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.classList.remove('is-drag-over');
+    const drag = scrapboardCatalogDrag, targetKey = decodeURIComponent(targetToken), groupKey = groupToken ? decodeURIComponent(groupToken) : '';
+    if (!drag || drag.type !== type) {
+        endScrapboardCatalogDrag();
+        return;
+    }
+    const saved = await reorderScrapboardCatalog(type, drag.key, targetKey, groupKey);
+    endScrapboardCatalogDrag();
+    if (saved) {
+        scrapboardCatalogExpanded = true;
+        render();
+        toast(`${type === 'category' ? 'Categories' : 'Items'} rearranged`);
+    }
+    else if (drag.key !== targetKey)
+        toast('Arrangement was not saved');
+}
 function scrapboardCatalogManagementMarkup() {
     const categories = scrapboardCategoryEntries(true);
     return `<section class="scrap-catalog-manager"><details class="scrap-catalog-details" ${scrapboardCatalogExpanded ? 'open' : ''} ontoggle="rememberScrapboardCatalogExpanded(this.open)"><summary class="scrap-catalog-head"><div><div class="eyebrow">Catalog management</div><h2>Edit categories and items</h2><p>Rename, move, deactivate, or safely remove entries. Inactive entries stay in history but disappear from Buying and active rates.</p></div><span class="scrap-catalog-summary-action"><span class="scrap-catalog-count">${scrapboardItems(true).length} items</span><span class="scrap-catalog-toggle-label"><span class="when-closed">Expand catalog</span><span class="when-open">Minimize catalog</span><span class="scrap-catalog-chevron" aria-hidden="true">⌄</span></span></span></summary><div class="scrap-catalog-groups">${categories.map(category => {
         const items = scrapboardCategoryItems(category.key), categoryToken = catalogActionToken(category.key);
-        return `<article class="scrap-catalog-group${category.active ? '' : ' is-inactive'}"><div class="scrap-catalog-group-head"><div><strong>${esc(category.label)}</strong>${category.active ? '' : '<span class="scrap-catalog-status">Inactive</span>'}<small>${items.length} item${items.length === 1 ? '' : 's'}</small></div><button class="btn secondary small" type="button" onclick="openScrapboardCategoryEditor('${categoryToken}')">Manage category</button></div><div class="scrap-catalog-items">${items.length ? items.map(item => `<div class="scrap-catalog-item"><div><strong>${esc(item.label)}</strong>${item.active ? '' : '<span class="scrap-catalog-status">Inactive</span>'}<small>${esc(item.unit)}</small></div><button class="btn secondary small" type="button" onclick="openScrapboardItemEditor('${catalogActionToken(item.key)}')">Edit item</button></div>`).join('') : '<p class="scrap-catalog-empty">No items yet.</p>'}</div></article>`;
+        return `<article class="scrap-catalog-group${category.active ? '' : ' is-inactive'}" ondragover="overScrapboardCatalogDrop(event,'category')" ondragleave="leaveScrapboardCatalogDrop(event)" ondrop="dropScrapboardCatalog(event,'category','${categoryToken}')"><div class="scrap-catalog-group-head"><div><span class="scrap-drag-handle" draggable="true" title="Drag to rearrange category" aria-label="Drag to rearrange category" ondragstart="startScrapboardCatalogDrag(event,'category','${categoryToken}')" ondragend="endScrapboardCatalogDrag()">⋮⋮</span><strong>${esc(category.label)}</strong>${category.active ? '' : '<span class="scrap-catalog-status">Inactive</span>'}<small>${items.length} item${items.length === 1 ? '' : 's'}</small></div><button class="btn secondary small" type="button" onclick="openScrapboardCategoryEditor('${categoryToken}')">Manage category</button></div><div class="scrap-catalog-items">${items.length ? items.map(item => `<div class="scrap-catalog-item" ondragover="overScrapboardCatalogDrop(event,'item')" ondragleave="leaveScrapboardCatalogDrop(event)" ondrop="dropScrapboardCatalog(event,'item','${catalogActionToken(item.key)}','${categoryToken}')"><div><span class="scrap-drag-handle" draggable="true" title="Drag to rearrange item" aria-label="Drag to rearrange item" ondragstart="startScrapboardCatalogDrag(event,'item','${catalogActionToken(item.key)}','${categoryToken}')" ondragend="endScrapboardCatalogDrag()">⋮⋮</span><strong>${esc(item.label)}</strong>${item.active ? '' : '<span class="scrap-catalog-status">Inactive</span>'}<small>${esc(item.unit)}</small></div><button class="btn secondary small" type="button" onclick="openScrapboardItemEditor('${catalogActionToken(item.key)}')">Edit item</button></div>`).join('') : '<p class="scrap-catalog-empty">No items yet.</p>'}</div></article>`;
     }).join('')}</div></details></section>`;
 }
 function scrapboardCategoryEditorMarkup(key) {
@@ -1691,7 +1813,7 @@ function renderRates() {
   </section>${scrapboardRateSheetToggleMarkup('rates')}
   ${isAdmin() ? `<section class="scrap-quick-add"><div><div class="eyebrow">Quick add</div><h2>Add categories and buying items</h2><p>New items are saved to the shared rate list and appear automatically on the Buying page.</p></div><div class="scrap-quick-add-grid">
     <div class="scrap-quick-add-form"><h3>New category</h3><div class="field"><label for="quick_add_category_name">Category name</label><input id="quick_add_category_name" maxlength="80" placeholder="e.g. Charger boards"></div><button class="btn secondary small" type="button" onclick="submitScrapboardCategory()">Add category</button></div>
-    <div class="scrap-quick-add-form"><h3>New item</h3><div class="field"><label for="quick_add_item_category">Category</label><select id="quick_add_item_category">${scrapboardCategoryOptions(scrapboardCategoryEntries())}</select></div><div class="field"><label for="quick_add_item_name">Item name</label><input id="quick_add_item_name" maxlength="100" placeholder="e.g. Type-C port"></div><div class="scrap-quick-add-row"><div class="field"><label for="quick_add_item_unit">Unit</label><select id="quick_add_item_unit"><option value="kg">kg</option><option value="pc">pc</option></select></div><div class="field"><label for="quick_add_item_rate">Starting rate</label><input id="quick_add_item_rate" type="number" min="1" step="1" placeholder="0"></div></div><button class="btn secondary small" type="button" onclick="submitScrapboardItem()">Add item</button></div>
+    <div class="scrap-quick-add-form"><h3>New item</h3><div class="field"><label for="quick_add_item_category">Category</label><select id="quick_add_item_category" onchange="syncQuickAddScrapboardSubcategory()">${scrapboardQuickAddCategoryOptions()}</select></div><div class="field" id="quick_add_item_subcategory_field"><label for="quick_add_item_subcategory">IC Chips classification</label><select id="quick_add_item_subcategory">${scrapboardQuickAddSubcategoryOptions()}</select></div><div class="field"><label for="quick_add_item_name">Item name</label><input id="quick_add_item_name" maxlength="100" placeholder="e.g. Type-C port"></div><div class="scrap-quick-add-row"><div class="field"><label for="quick_add_item_unit">Unit</label><select id="quick_add_item_unit"><option value="kg">kg</option><option value="pc">pc</option></select></div><div class="field"><label for="quick_add_item_rate">Starting rate</label><input id="quick_add_item_rate" type="number" min="1" step="1" placeholder="0"></div></div><button class="btn secondary small" type="button" onclick="submitScrapboardItem()">Add item</button></div>
   </div></section>${scrapboardCatalogManagementMarkup()}` : ''}
   ${sections.map(section => `<section class="scrap-rate-section"><h3>${esc(section.label)}</h3>${section.groups.map(group => `<div class="scrap-rate-subsection">${group.label ? `<h4>${esc(group.label)}</h4>` : ''}<div class="scrap-rate-grid">
     ${group.items.map(item => `<div class="scrap-rate-card"><div><label for="scrap_rate_${item.key}">${esc(item.label)}</label><small>Philippine peso / ${item.unit}</small></div><div class="scrap-rate-input"><span>₱</span><input id="scrap_rate_${item.key}" type="number" min="1" step="1" value="${roundPeso(rateMap?.[item.key] || item.rate)}" ${editable ? '' : 'readonly aria-readonly="true"'}></div></div>`).join('')}
@@ -1878,7 +2000,7 @@ async function submitScrapboardCategory() {
     toast(`${name} category added`);
 }
 async function submitScrapboardItem() {
-    const category = val('quick_add_item_category'), name = normalizedCatalogName(val('quick_add_item_name')), unit = val('quick_add_item_unit'), rate = Number(val('quick_add_item_rate'));
+    const selectedCategory = val('quick_add_item_category'), category = selectedCategory === QUICK_ADD_IC_CHIPS_CATEGORY ? val('quick_add_item_subcategory') : selectedCategory, name = normalizedCatalogName(val('quick_add_item_name')), unit = val('quick_add_item_unit'), rate = Number(val('quick_add_item_rate'));
     const categoryEntry = scrapboardCategoryEntry(category);
     if (!name) {
         toast('Enter an item name');

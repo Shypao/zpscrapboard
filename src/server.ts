@@ -189,6 +189,7 @@ export function validateCatalogManagementCandidate(state:Record<string,any>,cand
     if(categoryLabels.has(normalized))throw new Error('Duplicate category label');
     categoryLabels.add(normalized);
     if(categorySettings[key]?.active!==undefined&&typeof categorySettings[key].active!=='boolean')throw new Error('Invalid category active state');
+    if(categorySettings[key]?.order!==undefined&&(!Number.isInteger(Number(categorySettings[key].order))||Number(categorySettings[key].order)<0))throw new Error('Invalid category order');
   }
 
   const customItems=pricingCustomItems(candidate),customItemKeys=new Set<string>(),itemSettings=pricingCatalogSettings(candidate,'scrapboardItemSettings');
@@ -208,6 +209,7 @@ export function validateCatalogManagementCandidate(state:Record<string,any>,cand
     if(!categoryKeys.includes(group))throw new Error('Invalid item category');
     if(!['kg','pc'].includes(unit))throw new Error('Invalid item unit');
     if(setting.active!==undefined&&typeof setting.active!=='boolean')throw new Error('Invalid item active state');
+    if(setting.order!==undefined&&(!Number.isInteger(Number(setting.order))||Number(setting.order)<0))throw new Error('Invalid item order');
   }
   for(const rateKey of ['scrapboardRates','scrapboardBulkRates']){
     const rates=(candidate as Record<string,any>)[rateKey]??(rateKey==='scrapboardBulkRates'?(candidate as Record<string,any>).scrapboardRates:undefined);

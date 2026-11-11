@@ -39,6 +39,9 @@ async function loadCustomItemApi() {
       categoryEditor: key => scrapboardCategoryEditorMarkup(key),
       itemEditor: key => scrapboardItemEditorMarkup(key),
       setCatalogExpanded: value => rememberScrapboardCatalogExpanded(value),
+      reorderCatalog: (type, source, target, group = '') => reorderScrapboardCatalog(type, source, target, group),
+      categoryKeys: () => scrapboardCategoryEntries(true).map(category => category.key),
+      itemKeys: group => scrapboardCategoryItems(group).map(item => item.key),
       setRateSort: value => { scrapboardRateSort = value; },
       setRateSheet: value => { scrapboardRateSheet = normalizedScrapboardRateSheet(value); },
       setBuyingRateSheet: value => { buyingDraftForm.b_rate_sheet = normalizedScrapboardRateSheet(value); },
@@ -64,6 +67,17 @@ async function loadCustomItemApi() {
       exportRows: () => Array.from(scrapboardRateExportRows(), row => ({ ...row })),
       addCategory: value => addScrapboardCategory(value),
       addItem: (category, name, unit, rate) => addScrapboardItem(category, name, unit, rate),
+      quickAddItem: async (category, subcategory, name, unit = 'pc', rate = 25) => {
+        const elements = {
+          quick_add_item_category: { value: category }, quick_add_item_subcategory: { value: subcategory },
+          quick_add_item_name: { value: name }, quick_add_item_unit: { value: unit }, quick_add_item_rate: { value: String(rate) }
+        };
+        document.getElementById = id => elements[id] || null;
+        render = () => {};
+        toast = () => {};
+        await submitScrapboardItem();
+        return db.pricing.customScrapboardItems.find(item => item.label === name) || null;
+      },
       editCategory: (key, changes) => editScrapboardCategory(key, changes),
       editItem: (key, changes) => editScrapboardItem(key, changes),
       deleteCategory: key => deleteScrapboardCategory(key),
@@ -290,6 +304,19 @@ test('Catalog management is expandable and stays minimized until the administrat
   assert.doesNotMatch(api.renderRates(), /<details class="scrap-catalog-details" open/);
 });
 
+test('Catalog management drag handles persist category and item arrangement', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+
+  const markup = api.renderRates();
+  assert.match(markup, /draggable="true"[^>]*Drag to rearrange category/);
+  assert.match(markup, /draggable="true"[^>]*Drag to rearrange item/);
+  assert.equal(await api.reorderCatalog('category', 'Whole units', 'IC Chips · Coded'), true);
+  assert.equal(api.categoryKeys()[0], 'Whole units');
+  assert.equal(await api.reorderCatalog('item', 'A1', 'A6', 'IC Chips · Coded'), true);
+  assert.equal(api.itemKeys('IC Chips · Coded')[0], 'A1');
+});
+
 test('Daily Rates offers PNG and JPG downloads for the scrapboard overview', async () => {
   const api = await loadCustomItemApi();
   api.setAdmin();
@@ -328,9 +355,10 @@ test('custom EMCP and EMMC categories combine under the IC CHIP parent', async (
   assert.match(html, /<h4>EMCP<\/h4>/);
   assert.match(html, /<h4>EMMC<\/h4>/);
   assert.ok(html.indexOf('<h4>EMCP</h4>') < html.indexOf('<h4>EMMC</h4>'));
-  assert.match(html, /<optgroup label="IC Chips">/);
-  assert.match(html, /<option value="IC CHIP • EMCP"[^>]*>EMCP<\/option>/);
-  assert.match(html, /<option value="IC CHIP • EMMC"[^>]*>EMMC<\/option>/);
+  assert.match(html, /<option value="__IC_CHIPS__">IC Chips<\/option>/);
+  assert.match(html, /<option value="IC Chips · Coded">Coded<\/option>/);
+  assert.match(html, /<option value="IC Chips · Non-Coded">Non-Coded<\/option>/);
+  assert.match(html, /<option value="IC Chips · Other">Other<\/option>/);
 });
 
 test('downloadable scrapboard overview uses the active catalog groups and rates', async () => {
@@ -472,10 +500,20 @@ test('Quick Add submits stable category keys when display labels overlap old key
   await api.editCategory('IC Chips · Coded', { label: 'Whole boards', active: true });
 
   const html = api.renderRates();
-  assert.match(html, /<option value="IC Chips · Coded">Whole boards<\/option>/);
+  assert.match(html, /<option value="__IC_CHIPS__">IC Chips<\/option>/);
+  assert.match(html, /<option value="IC Chips · Coded">Coded<\/option>/);
   assert.match(html, /<option value="Whole boards">Main boards<\/option>/);
   assert.equal(await api.addItem('IC Chips · Coded', 'Stable Key Chip', 'pc', 25), true);
   assert.equal(api.catalog(true).find(item => item.label === 'Stable Key Chip').group, 'Whole boards');
+});
+
+test('Quick Add places IC chip items into the selected classification line', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+
+  const item = await api.quickAddItem('__IC_CHIPS__', 'IC Chips · Non-Coded', 'Quick NC item');
+  assert.equal(item.group, 'IC Chips · Non-Coded');
+  assert.equal(api.catalog(true).find(entry => entry.label === 'Quick NC item').group, 'IC Chips · Non-Coded');
 });
 
 test('Quick Add rejects duplicates of inactive category keys and labels', async () => {

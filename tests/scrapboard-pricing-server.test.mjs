@@ -163,6 +163,17 @@ test('catalog management rejects invalid custom item units and missing groups', 
   assert.match(result.message, /unit|category/i);
 });
 
+test('catalog management validates persisted drag order values', () => {
+  const candidate = structuredClone(currentPricing);
+  candidate.scrapboardCategorySettings = { 'Whole boards': { order: -1 } };
+  const result = serverPricingProbe(`
+    let message = '';
+    try { server.validateCatalogManagementCandidate({ pricing: ${JSON.stringify(currentPricing)} }, ${JSON.stringify(candidate)}); } catch (error) { message = error.message; }
+    process.stdout.write(JSON.stringify({ message }));
+  `);
+  assert.match(result.message, /category order/i);
+});
+
 test('catalog management allows deleting a custom category after its last item moved by override', () => {
   const movedCurrent = structuredClone(currentPricing);
   movedCurrent.scrapboardItemSettings = { CUSTOM_NEW: { label: 'New', group: 'Whole boards', unit: 'pc', active: true } };
