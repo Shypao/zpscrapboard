@@ -174,6 +174,22 @@ test('catalog management validates persisted drag order values', () => {
   assert.match(result.message, /category order/i);
 });
 
+test('catalog management allows a built-in category tombstone only after its items move out', () => {
+  const blocked = structuredClone(currentPricing);
+  blocked.scrapboardCategorySettings = { 'IC Chips · Coded': { active: false, deleted: true } };
+  const allowed = structuredClone(blocked);
+  allowed.scrapboardItemSettings = Object.fromEntries(['A6','A5','A4','A3','A2','A1'].map(key => [key, { group: 'Whole boards', unit: 'kg', active: true }]));
+  const result = serverPricingProbe(`
+    const state = { pricing: ${JSON.stringify(currentPricing)} };
+    let blockedMessage = '', allowedMessage = '';
+    try { server.validateCatalogManagementCandidate(state, ${JSON.stringify(blocked)}); } catch (error) { blockedMessage = error.message; }
+    try { server.validateCatalogManagementCandidate(state, ${JSON.stringify(allowed)}); } catch (error) { allowedMessage = error.message; }
+    process.stdout.write(JSON.stringify({ blockedMessage, allowedMessage }));
+  `);
+  assert.match(result.blockedMessage, /still contains items/i);
+  assert.equal(result.allowedMessage, '');
+});
+
 test('catalog management allows deleting a custom category after its last item moved by override', () => {
   const movedCurrent = structuredClone(currentPricing);
   movedCurrent.scrapboardItemSettings = { CUSTOM_NEW: { label: 'New', group: 'Whole boards', unit: 'pc', active: true } };

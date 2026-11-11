@@ -432,8 +432,8 @@ function scrapboardCategoryEntries(includeInactive=false){
   return rawScrapboardCategories().map((key,index)=>{
     const setting=catalogOwnSetting(settings,key);
     const configuredOrder=Number(setting.order),order=Number.isInteger(configuredOrder)&&configuredOrder>=0?configuredOrder:index;
-    return {key,label:normalizedCatalogName(setting.label)||key,active:setting.active!==false,custom:custom.has(key),order,rawOrder:index};
-  }).filter(category=>includeInactive||category.active).sort((a,b)=>a.order-b.order||a.rawOrder-b.rawOrder).map(({order,rawOrder,...category})=>category);
+    return {key,label:normalizedCatalogName(setting.label)||key,active:setting.active!==false,deleted:setting.deleted===true,custom:custom.has(key),order,rawOrder:index};
+  }).filter(category=>!category.deleted&&(includeInactive||category.active)).sort((a,b)=>a.order-b.order||a.rawOrder-b.rawOrder).map(({order,rawOrder,deleted,...category})=>category);
 }
 function scrapboardCategoryEntry(value,includeInactive=true){
   const normalized=normalizedCatalogName(value).toLowerCase();
@@ -563,15 +563,19 @@ function deleteScrapboardItem(key){ return queueScrapboardCatalogMutation(async(
 function deleteScrapboardCategory(key){ return queueScrapboardCatalogMutation(async()=>{
   if(!isAdmin()) return false;
   const category=scrapboardCategoryEntry(key,true);
-  if(!category?.custom) return false;
+  if(!category) return false;
   const hasItems=rawScrapboardItems().some(item=>{
     const setting=catalogOwnSetting(db.pricing.scrapboardItemSettings||{},item.key);
     return (scrapboardCategoryEntry(setting.group||item.group,true)?.key||item.group)===category.key;
   });
   if(hasItems) return false;
   const before=catalogPricingSnapshot();
-  db.pricing.customScrapboardCategories=db.pricing.customScrapboardCategories.filter(value=>value!==category.key);
-  const settings={...(db.pricing.scrapboardCategorySettings||{})};delete settings[category.key];db.pricing.scrapboardCategorySettings=settings;
+  const settings={...(db.pricing.scrapboardCategorySettings||{})};
+  if(category.custom){
+    db.pricing.customScrapboardCategories=db.pricing.customScrapboardCategories.filter(value=>value!==category.key);
+    delete settings[category.key];
+  }else settings[category.key]={...catalogOwnSetting(settings,category.key),active:false,deleted:true};
+  db.pricing.scrapboardCategorySettings=settings;
   if(await savePricingDB(false,'catalog-management')) return true;
   restoreCatalogPricing(before);return false;
 }); }
@@ -1263,7 +1267,7 @@ function scrapboardRateSections(entries=Object.entries(scrapboardRateGroups())){
 function catalogActionToken(value){ return encodeURIComponent(String(value)).replace(/'/g,'%27'); }
 function scrapboardCategoryCanDelete(key){
   const category=scrapboardCategoryEntry(key,true);
-  return Boolean(category?.custom&&!scrapboardCategoryItems(category.key).length);
+  return Boolean(category&&!scrapboardCategoryItems(category.key).length);
 }
 function scrapboardItemCanDelete(key){
   return Boolean((db.pricing?.customScrapboardItems||[]).some(item=>item.key===key)&&!scrapboardCatalogReferenced(key));
@@ -1327,7 +1331,7 @@ function scrapboardCategoryEditorMarkup(key){
   const category=scrapboardCategoryEntry(key,true);
   if(!category) return '';
   const token=catalogActionToken(category.key);
-  return `<div class="edit-modal scrap-catalog-modal" role="dialog" aria-modal="true" aria-labelledby="scrap_catalog_editor_title"><div class="summary-modal-head"><div><div class="eyebrow">Catalog management</div><h2 id="scrap_catalog_editor_title">Edit category</h2></div><button type="button" class="modal-close" onclick="closeScrapboardCatalogEditor()" aria-label="Close">×</button></div><div class="form-grid"><div class="field span-2"><label for="scrap_category_label">Category name</label><input id="scrap_category_label" maxlength="80" value="${esc(category.label)}"></div></div><p class="form-note">Removing this category hides all its items from Daily Rates and new buying transactions without changing past records.</p><div class="form-actions scrap-catalog-modal-actions">${scrapboardCategoryCanDelete(category.key)?`<button type="button" class="btn danger" onclick="confirmDeleteScrapboardCategory('${token}')">Delete permanently</button>`:''}${category.active?`<button type="button" class="btn danger" onclick="confirmRemoveScrapboardCategory('${token}')">Remove category</button>`:`<button type="button" class="btn secondary" onclick="restoreScrapboardCategory('${token}')">Restore category</button>`}<button type="button" class="btn" onclick="saveScrapboardCategoryEditor('${token}')">Save category</button></div></div>`;
+  return `<div class="edit-modal scrap-catalog-modal" role="dialog" aria-modal="true" aria-labelledby="scrap_catalog_editor_title"><div class="summary-modal-head"><div><div class="eyebrow">Catalog management</div><h2 id="scrap_catalog_editor_title">Edit category</h2></div><button type="button" class="modal-close" onclick="closeScrapboardCatalogEditor()" aria-label="Close">×</button></div><div class="form-grid"><div class="field span-2"><label for="scrap_category_label">Category name</label><input id="scrap_category_label" maxlength="80" value="${esc(category.label)}"></div></div><p class="form-note">Move every item to another category first to unlock permanent deletion. Removing only hides the category without changing past records.</p><div class="form-actions scrap-catalog-modal-actions">${scrapboardCategoryCanDelete(category.key)?`<button type="button" class="btn danger" onclick="confirmDeleteScrapboardCategory('${token}')">Delete permanently</button>`:''}${category.active?`<button type="button" class="btn danger" onclick="confirmRemoveScrapboardCategory('${token}')">Remove category</button>`:`<button type="button" class="btn secondary" onclick="restoreScrapboardCategory('${token}')">Restore category</button>`}<button type="button" class="btn" onclick="saveScrapboardCategoryEditor('${token}')">Save category</button></div></div>`;
 }
 function scrapboardItemEditorMarkup(key){
   const item=scrapboardItems(true).find(entry=>entry.key===key);
@@ -1384,7 +1388,7 @@ async function confirmDeleteScrapboardItem(token){
 }
 async function confirmDeleteScrapboardCategory(token){
   const key=decodeURIComponent(token),category=scrapboardCategoryEntry(key,true);if(!category||!confirm(`Permanently delete “${category.label}”?`))return;
-  if(!await deleteScrapboardCategory(key)){toast('Only an empty custom category can be permanently deleted');return;}
+  if(!await deleteScrapboardCategory(key)){toast('Move every item out of this category before deleting it');return;}
   closeScrapboardCatalogEditor();render();toast(`${category.label} permanently deleted`);
 }
 function renderRates(){

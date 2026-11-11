@@ -173,6 +173,21 @@ test('unused custom item and then its empty category can be permanently deleted'
   assert.equal(api.categoryEntries(true).some(category => category.key === 'Disposable Parts'), false);
 });
 
+test('an empty built-in category can be permanently deleted after all items move out', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  assert.equal(await api.deleteCategory('IC Chips · Coded'), false);
+
+  const codedItems = api.catalog(true).filter(item => item.group === 'IC Chips · Coded');
+  for (const item of codedItems) {
+    assert.equal(await api.editItem(item.key, { label: item.label, group: 'Whole boards', unit: item.unit, active: item.ownActive }), true);
+  }
+  assert.match(api.categoryEditor('IC Chips · Coded'), /Delete permanently/);
+  assert.equal(await api.deleteCategory('IC Chips · Coded'), true);
+  assert.equal(api.categoryEntries(true).some(category => category.key === 'IC Chips · Coded'), false);
+  assert.equal(api.catalog(true).filter(item => codedItems.some(coded => coded.key === item.key)).every(item => item.group === 'Whole boards'), true);
+});
+
 test('staff cannot edit deactivate or delete catalog definitions', async () => {
   const api = await loadCustomItemApi();
   api.setStaff();
