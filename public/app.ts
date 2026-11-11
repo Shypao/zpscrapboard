@@ -1275,6 +1275,7 @@ function scrapboardItemCanDelete(key){
 let scrapboardCatalogExpanded=false;
 function rememberScrapboardCatalogExpanded(expanded){ scrapboardCatalogExpanded=Boolean(expanded); }
 let scrapboardCatalogDrag=null;
+let scrapboardCatalogPointerDrag=null;
 function startScrapboardCatalogDrag(event,type,token,groupToken=''){
   if(!isAdmin())return;
   event.stopPropagation();
@@ -1290,6 +1291,36 @@ function leaveScrapboardCatalogDrop(event){event.currentTarget.classList.remove(
 function endScrapboardCatalogDrag(){
   scrapboardCatalogDrag=null;
   document.querySelectorAll('.scrap-catalog-group.is-dragging,.scrap-catalog-item.is-dragging,.is-drag-over').forEach(element=>element.classList.remove('is-dragging','is-drag-over'));
+}
+function clearScrapboardCatalogPointerDrag(){
+  scrapboardCatalogPointerDrag=null;document.body.classList.remove('scrap-catalog-touch-active');
+  document.querySelectorAll('.scrap-catalog-group.is-dragging,.scrap-catalog-item.is-dragging,.is-drag-over').forEach(element=>element.classList.remove('is-dragging','is-drag-over'));
+}
+function startScrapboardCatalogPointer(event,type,token,groupToken=''){
+  if(!isAdmin()||event.pointerType==='mouse')return;
+  event.preventDefault();event.stopPropagation();
+  const source=event.currentTarget.closest(type==='category'?'.scrap-catalog-group':'.scrap-catalog-item');
+  scrapboardCatalogPointerDrag={type,key:decodeURIComponent(token),group:groupToken?decodeURIComponent(groupToken):'',pointerId:event.pointerId,handle:event.currentTarget,target:null};
+  event.currentTarget.setPointerCapture?.(event.pointerId);source?.classList.add('is-dragging');document.body.classList.add('scrap-catalog-touch-active');
+}
+function moveScrapboardCatalogPointer(event){
+  const drag=scrapboardCatalogPointerDrag;if(!drag||drag.pointerId!==event.pointerId)return;
+  event.preventDefault();
+  document.querySelectorAll('.is-drag-over').forEach(element=>element.classList.remove('is-drag-over'));
+  const target=document.elementFromPoint(event.clientX,event.clientY)?.closest(`[data-catalog-type="${drag.type}"]`);
+  if(!target||target.dataset.catalogKey===drag.key||(drag.type==='item'&&target.dataset.catalogGroup!==drag.group)){drag.target=null;return;}
+  drag.target=target;target.classList.add('is-drag-over');
+}
+async function endScrapboardCatalogPointer(event){
+  const drag=scrapboardCatalogPointerDrag;if(!drag||drag.pointerId!==event.pointerId)return;
+  event.preventDefault();event.stopPropagation();
+  drag.handle.releasePointerCapture?.(event.pointerId);
+  const targetKey=drag.target?.dataset.catalogKey||'',groupKey=drag.target?.dataset.catalogGroup||drag.group;
+  clearScrapboardCatalogPointerDrag();
+  if(!targetKey)return;
+  const saved=await reorderScrapboardCatalog(drag.type,drag.key,targetKey,groupKey);
+  if(saved){scrapboardCatalogExpanded=true;render();toast(`${drag.type==='category'?'Categories':'Items'} rearranged`);}
+  else toast('Arrangement was not saved');
 }
 function reorderScrapboardCatalog(type,sourceKey,targetKey,groupKey=''){return queueScrapboardCatalogMutation(async()=>{
   if(!isAdmin()||sourceKey===targetKey)return false;
@@ -1324,7 +1355,7 @@ function scrapboardCatalogManagementMarkup(){
   const categories=scrapboardCategoryEntries(true);
   return `<section class="scrap-catalog-manager"><details class="scrap-catalog-details" ${scrapboardCatalogExpanded?'open':''} ontoggle="rememberScrapboardCatalogExpanded(this.open)"><summary class="scrap-catalog-head"><div><div class="eyebrow">Catalog management</div><h2>Edit categories and items</h2><p>Rename, move, deactivate, or safely remove entries. Inactive entries stay in history but disappear from Buying and active rates.</p></div><span class="scrap-catalog-summary-action"><span class="scrap-catalog-count">${scrapboardItems(true).length} items</span><span class="scrap-catalog-toggle-label"><span class="when-closed">Expand catalog</span><span class="when-open">Minimize catalog</span><span class="scrap-catalog-chevron" aria-hidden="true">⌄</span></span></span></summary><div class="scrap-catalog-groups">${categories.map(category=>{
     const items=scrapboardCategoryItems(category.key),categoryToken=catalogActionToken(category.key);
-    return `<article class="scrap-catalog-group${category.active?'':' is-inactive'}" ondragover="overScrapboardCatalogDrop(event,'category')" ondragleave="leaveScrapboardCatalogDrop(event)" ondrop="dropScrapboardCatalog(event,'category','${categoryToken}')"><div class="scrap-catalog-group-head"><div><span class="scrap-drag-handle" draggable="true" title="Drag to rearrange category" aria-label="Drag to rearrange category" ondragstart="startScrapboardCatalogDrag(event,'category','${categoryToken}')" ondragend="endScrapboardCatalogDrag()">⋮⋮</span><strong>${esc(category.label)}</strong>${category.active?'':'<span class="scrap-catalog-status">Inactive</span>'}<small>${items.length} item${items.length===1?'':'s'}</small></div><button class="btn secondary small" type="button" onclick="openScrapboardCategoryEditor('${categoryToken}')">Manage category</button></div><div class="scrap-catalog-items">${items.length?items.map(item=>`<div class="scrap-catalog-item" ondragover="overScrapboardCatalogDrop(event,'item')" ondragleave="leaveScrapboardCatalogDrop(event)" ondrop="dropScrapboardCatalog(event,'item','${catalogActionToken(item.key)}','${categoryToken}')"><div><span class="scrap-drag-handle" draggable="true" title="Drag to rearrange item" aria-label="Drag to rearrange item" ondragstart="startScrapboardCatalogDrag(event,'item','${catalogActionToken(item.key)}','${categoryToken}')" ondragend="endScrapboardCatalogDrag()">⋮⋮</span><strong>${esc(item.label)}</strong>${item.active?'':'<span class="scrap-catalog-status">Inactive</span>'}<small>${esc(item.unit)}</small></div><button class="btn secondary small" type="button" onclick="openScrapboardItemEditor('${catalogActionToken(item.key)}')">Edit item</button></div>`).join(''):'<p class="scrap-catalog-empty">No items yet.</p>'}</div></article>`;
+    return `<article class="scrap-catalog-group${category.active?'':' is-inactive'}" data-catalog-type="category" data-catalog-key="${esc(category.key)}" ondragover="overScrapboardCatalogDrop(event,'category')" ondragleave="leaveScrapboardCatalogDrop(event)" ondrop="dropScrapboardCatalog(event,'category','${categoryToken}')"><div class="scrap-catalog-group-head"><div><span class="scrap-drag-handle" draggable="true" title="Drag to rearrange category" aria-label="Drag to rearrange category" ondragstart="startScrapboardCatalogDrag(event,'category','${categoryToken}')" ondragend="endScrapboardCatalogDrag()" onpointerdown="startScrapboardCatalogPointer(event,'category','${categoryToken}')" onpointermove="moveScrapboardCatalogPointer(event)" onpointerup="endScrapboardCatalogPointer(event)" onpointercancel="clearScrapboardCatalogPointerDrag()">⋮⋮</span><strong>${esc(category.label)}</strong>${category.active?'':'<span class="scrap-catalog-status">Inactive</span>'}<small>${items.length} item${items.length===1?'':'s'}</small></div><button class="btn secondary small" type="button" onclick="openScrapboardCategoryEditor('${categoryToken}')">Manage category</button></div><div class="scrap-catalog-items">${items.length?items.map(item=>`<div class="scrap-catalog-item" data-catalog-type="item" data-catalog-key="${esc(item.key)}" data-catalog-group="${esc(category.key)}" ondragover="overScrapboardCatalogDrop(event,'item')" ondragleave="leaveScrapboardCatalogDrop(event)" ondrop="dropScrapboardCatalog(event,'item','${catalogActionToken(item.key)}','${categoryToken}')"><div><span class="scrap-drag-handle" draggable="true" title="Drag to rearrange item" aria-label="Drag to rearrange item" ondragstart="startScrapboardCatalogDrag(event,'item','${catalogActionToken(item.key)}','${categoryToken}')" ondragend="endScrapboardCatalogDrag()" onpointerdown="startScrapboardCatalogPointer(event,'item','${catalogActionToken(item.key)}','${categoryToken}')" onpointermove="moveScrapboardCatalogPointer(event)" onpointerup="endScrapboardCatalogPointer(event)" onpointercancel="clearScrapboardCatalogPointerDrag()">⋮⋮</span><strong>${esc(item.label)}</strong>${item.active?'':'<span class="scrap-catalog-status">Inactive</span>'}<small>${esc(item.unit)}</small></div><button class="btn secondary small" type="button" onclick="openScrapboardItemEditor('${catalogActionToken(item.key)}')">Edit item</button></div>`).join(''):'<p class="scrap-catalog-empty">No items yet.</p>'}</div></article>`;
   }).join('')}</div></details></section>`;
 }
 function scrapboardCategoryEditorMarkup(key){

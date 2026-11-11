@@ -326,6 +326,9 @@ test('Catalog management drag handles persist category and item arrangement', as
   const markup = api.renderRates();
   assert.match(markup, /draggable="true"[^>]*Drag to rearrange category/);
   assert.match(markup, /draggable="true"[^>]*Drag to rearrange item/);
+  assert.match(markup, /onpointerdown="startScrapboardCatalogPointer\(event,'category'/);
+  assert.match(markup, /onpointermove="moveScrapboardCatalogPointer\(event\)"/);
+  assert.match(markup, /onpointerup="endScrapboardCatalogPointer\(event\)"/);
   assert.equal(await api.reorderCatalog('category', 'Whole units', 'IC Chips · Coded'), true);
   assert.equal(api.categoryKeys()[0], 'Whole units');
   assert.equal(await api.reorderCatalog('item', 'A1', 'A6', 'IC Chips · Coded'), true);
