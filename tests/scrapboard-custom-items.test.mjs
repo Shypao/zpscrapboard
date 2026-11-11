@@ -318,15 +318,16 @@ test('Daily Rates groups IC chips under one category with subcategories', async 
 test('custom EMCP and EMMC categories combine under the IC CHIP parent', async () => {
   const api = await loadCustomItemApi();
   api.setAdmin();
-  await api.addCategory('IC CHIP • EMCP');
   await api.addCategory('IC CHIP • EMMC');
-  await api.addItem('IC CHIP • EMCP', 'EMCP sample', 'kg', 500);
+  await api.addCategory('IC CHIP • EMCP');
   await api.addItem('IC CHIP • EMMC', 'EMMC sample', 'kg', 400);
+  await api.addItem('IC CHIP • EMCP', 'EMCP sample', 'kg', 500);
 
   const html = api.renderRates();
   assert.match(html, /<h3>IC Chips<\/h3>/);
   assert.match(html, /<h4>EMCP<\/h4>/);
   assert.match(html, /<h4>EMMC<\/h4>/);
+  assert.ok(html.indexOf('<h4>EMCP</h4>') < html.indexOf('<h4>EMMC</h4>'));
   assert.match(html, /<optgroup label="IC Chips">/);
   assert.match(html, /<option value="IC CHIP • EMCP"[^>]*>EMCP<\/option>/);
   assert.match(html, /<option value="IC CHIP • EMMC"[^>]*>EMMC<\/option>/);
@@ -523,7 +524,8 @@ test('Buying falls back to the first active item when the saved selection is ina
 
   const html = api.renderBuying();
   assert.match(html, /id="b_karat" type="hidden" value="NC512"/);
-  assert.match(html, /data-selected-label="Non-Coded · NC 512"/);
+  assert.match(html, /data-selected-label="NC 512"/);
+  assert.doesNotMatch(html, /data-selected-label="Non-Coded · NC 512"/);
   assert.match(html, /id="b_rate"[^>]*value="1370"/);
 });
 

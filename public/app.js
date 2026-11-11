@@ -1503,6 +1503,16 @@ function scrapboardIcChipSubcategory(value) {
     const match = String(value || '').match(/^IC\s*CHIPS?\s*(?:·|•|:|-)\s*(.+)$/i);
     return match?.[1]?.trim() || '';
 }
+function scrapboardIcChipSubcategoryRank(value) {
+    const normalized = normalizedCatalogName(value).toLowerCase();
+    if (['emcp', 'coded'].includes(normalized))
+        return 0;
+    if (['emmc', 'non-coded', 'non coded'].includes(normalized))
+        return 1;
+    if (['other', 'other codes'].includes(normalized))
+        return 2;
+    return 3;
+}
 function scrapboardCategoryOptions(categories, selectedKey = '') {
     const option = category => `<option value="${esc(category.key)}"${category.key === selectedKey ? ' selected' : ''}>${esc(scrapboardIcChipSubcategory(category.label) || category.label)}${category.active ? '' : ' (inactive)'}</option>`;
     const icCategories = categories.filter(category => scrapboardIcChipSubcategory(category.label));
@@ -1528,6 +1538,8 @@ function scrapboardRateSections(entries = Object.entries(scrapboardRateGroups())
         }
         sections.push({ label: group, groups: [{ label: '', items: sortedScrapboardRateItems(items) }] });
     });
+    if (icSection)
+        icSection.groups.sort((a, b) => scrapboardIcChipSubcategoryRank(a.label) - scrapboardIcChipSubcategoryRank(b.label));
     return sections;
 }
 function catalogActionToken(value) { return encodeURIComponent(String(value)).replace(/'/g, '%27'); }
@@ -7694,11 +7706,13 @@ function scrapboardBuyingSections(items = scrapboardItems()) {
         }
         section.items.push({ ...item, subcategory });
     });
+    const icSection = byLabel.get('IC Chips');
+    if (icSection)
+        icSection.items.sort((a, b) => scrapboardIcChipSubcategoryRank(a.subcategory) - scrapboardIcChipSubcategoryRank(b.subcategory));
     return sections;
 }
 function scrapboardBuyingSearchLabel(item) {
-    const subcategory = scrapboardIcChipSubcategory(item.group);
-    return `${subcategory ? `${subcategory} · ` : ''}${item.label}`;
+    return item.label;
 }
 function setScrapboardBuyingCategory(token) {
     const label = decodeURIComponent(token);
