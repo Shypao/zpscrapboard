@@ -152,6 +152,7 @@ const LEGACY_SCRAPBOARD_CATEGORY_MAP:Record<string,string>={
 function legacyScrapboardCategoryTarget(value:unknown):string{return LEGACY_SCRAPBOARD_CATEGORY_MAP[normalizedCatalogLabel(value).toLowerCase()]??'';}
 export function migrateLegacyCatalogPricing(pricing:PricingSettings):PricingSettings{
   const record=pricing as Record<string,any>,customCategories=pricingCustomCategories(pricing);
+  if(!record.scrapboardBulkRates||typeof record.scrapboardBulkRates!=='object'||Array.isArray(record.scrapboardBulkRates))record.scrapboardBulkRates={...(record.scrapboardRates??{})};
   const validCategories=new Set([...DEFAULT_SCRAPBOARD_ITEMS.map(item=>item.group),...customCategories]);
   const categorySettings=pricingCatalogSettings(pricing,'scrapboardCategorySettings'),migratedCategorySettings:Record<string,any>={};
   for(const [key,value] of Object.entries(categorySettings)){
@@ -208,10 +209,12 @@ export function validateCatalogManagementCandidate(state:Record<string,any>,cand
     if(!['kg','pc'].includes(unit))throw new Error('Invalid item unit');
     if(setting.active!==undefined&&typeof setting.active!=='boolean')throw new Error('Invalid item active state');
   }
-  const rates=(candidate as Record<string,any>).scrapboardRates;
-  if(!rates||typeof rates!=='object'||Array.isArray(rates))throw new Error('Invalid scrapboard rates');
-  for(const [key,value] of Object.entries(rates))if(!itemKeys.has(key)||!Number.isInteger(Number(value))||Number(value)<=0)throw new Error('Invalid scrapboard rate');
-  for(const item of customItems)if(!Number.isInteger(Number(rates[item.key]))||Number(rates[item.key])<=0)throw new Error('Missing custom item rate');
+  for(const rateKey of ['scrapboardRates','scrapboardBulkRates']){
+    const rates=(candidate as Record<string,any>)[rateKey]??(rateKey==='scrapboardBulkRates'?(candidate as Record<string,any>).scrapboardRates:undefined);
+    if(!rates||typeof rates!=='object'||Array.isArray(rates))throw new Error('Invalid scrapboard rates');
+    for(const [key,value] of Object.entries(rates))if(!itemKeys.has(key)||!Number.isInteger(Number(value))||Number(value)<=0)throw new Error('Invalid scrapboard rate');
+    for(const item of customItems)if(!Number.isInteger(Number(rates[item.key]))||Number(rates[item.key])<=0)throw new Error('Missing custom item rate');
+  }
 
   const removedItems=pricingCustomItems(current).filter(item=>!customItemKeys.has(String(item.key)));
   for(const item of removedItems)if(stateReferencesCatalogKey(state,String(item.key)))throw new Error(`Item ${String(item.key)} is used in history`);
@@ -233,7 +236,8 @@ export function isolatedPricingUpdate(current: PricingSettings | null, candidate
       customScrapboardItems:pricingCustomItems(candidate),
       scrapboardCategorySettings:pricingCatalogSettings(candidate,'scrapboardCategorySettings'),
       scrapboardItemSettings:pricingCatalogSettings(candidate,'scrapboardItemSettings'),
-      scrapboardRates:{...(candidateRecord.scrapboardRates??{})}
+      scrapboardRates:{...(candidateRecord.scrapboardRates??{})},
+      scrapboardBulkRates:{...(candidateRecord.scrapboardBulkRates??candidateRecord.scrapboardRates??{})}
     };
   }
   if (scope === 'catalog' && current) {
@@ -244,15 +248,17 @@ export function isolatedPricingUpdate(current: PricingSettings | null, candidate
       if(!categories.some(value=>value.toLowerCase()===category.toLowerCase()))categories.push(category);
     }
     const items=pricingCustomItems(current),knownKeys=new Set(items.map(item=>String(item.key)));
-    const rates={...(currentRecord.scrapboardRates??{})};
+    const rates={...(currentRecord.scrapboardRates??{})},bulkRates={...(currentRecord.scrapboardBulkRates??currentRecord.scrapboardRates??{})};
     for(const item of pricingCustomItems(candidate)){
       const key=String(item.key||'');
       if(!key||knownKeys.has(key))continue;
       items.push(item);knownKeys.add(key);
       const rate=Number(candidateRecord.scrapboardRates?.[key]??item.rate);
       if(Number.isInteger(rate)&&rate>0)rates[key]=rate;
+      const bulkRate=Number(candidateRecord.scrapboardBulkRates?.[key]??rate);
+      if(Number.isInteger(bulkRate)&&bulkRate>0)bulkRates[key]=bulkRate;
     }
-    return {...currentRecord,customScrapboardCategories:categories,customScrapboardItems:items,scrapboardRates:rates};
+    return {...currentRecord,customScrapboardCategories:categories,customScrapboardItems:items,scrapboardRates:rates,scrapboardBulkRates:bulkRates};
   }
   const next = { ...candidate };
   if(current){
@@ -263,11 +269,14 @@ export function isolatedPricingUpdate(current: PricingSettings | null, candidate
     next.scrapboardItemSettings=pricingCatalogSettings(current,'scrapboardItemSettings');
     const candidateKeys=new Set(pricingCustomItems(candidate).map(item=>String(item.key)));
     const nextRates={...(candidateRecord.scrapboardRates??{})};
+    const nextBulkRates={...(candidateRecord.scrapboardBulkRates??candidateRecord.scrapboardRates??{})};
     for(const item of pricingCustomItems(current)){
       const key=String(item.key||'');
       if(key&&!candidateKeys.has(key))nextRates[key]=currentRecord.scrapboardRates?.[key]??item.rate;
+      if(key&&!candidateKeys.has(key))nextBulkRates[key]=currentRecord.scrapboardBulkRates?.[key]??currentRecord.scrapboardRates?.[key]??item.rate;
     }
     next.scrapboardRates=nextRates;
+    next.scrapboardBulkRates=nextBulkRates;
   }
   if (current && Object.prototype.hasOwnProperty.call(current, 'publicDailyRates')) next.publicDailyRates = current.publicDailyRates;
   else delete next.publicDailyRates;
@@ -410,6 +419,7 @@ function defaultPricingSettings(): PricingSettings {
     auto:{enabled:false,lastFetchDate:'',lastAppliedDate:'',lastFetchedAt:'',usdPhp:0,spotUsd:{},draft:null},
     dailyFormula:{effectiveDate,baseRates:{Gold:8500,Silver:105,Platinum:2450}},
     scrapboardRates:{...DEFAULT_SCRAPBOARD_RATES},
+    scrapboardBulkRates:{...DEFAULT_SCRAPBOARD_RATES},
     staffRateEditingUnlocked:false,
     featured:{metal:'Gold',key:'18K-BUO',low:6360,high:6560}
   } as PricingSettings;
@@ -1054,10 +1064,13 @@ export function staffEditablePricing(currentPricing: PricingSettings, candidateP
   const candidateFormula = candidate.dailyFormula ?? { effectiveDate: '', baseRates: {} };
   const candidateBaseRates = candidateFormula.baseRates ?? {};
   const candidateScrapboardRates = candidate.scrapboardRates ?? {};
+  const candidateBulkRates = candidate.scrapboardBulkRates ?? candidate.scrapboardRates ?? {};
   const permittedScrapboardRates=new Set(Object.keys(current.scrapboardRates??{}));
-  if (Object.keys(candidateScrapboardRates).length !== permittedScrapboardRates.size ||
-      Object.entries(candidateScrapboardRates).some(([key,value]) => !permittedScrapboardRates.has(key) || !Number.isFinite(Number(value)) || Number(value) <= 0)) {
-    throw new Error('Invalid scrapboard daily buying rate');
+  for(const rates of [candidateScrapboardRates,candidateBulkRates]){
+    if (Object.keys(rates).length !== permittedScrapboardRates.size ||
+        Object.entries(rates).some(([key,value]) => !permittedScrapboardRates.has(key) || !Number.isFinite(Number(value)) || Number(value) <= 0)) {
+      throw new Error('Invalid scrapboard daily buying rate');
+    }
   }
   if (typeof candidateFormula.effectiveDate !== 'string' || !candidateFormula.effectiveDate ||
       Object.entries(candidateBaseRates).some(([metal, value]) => !permittedBaseRates.has(metal) || !Number.isFinite(Number(value)) || Number(value) <= 0)) {
@@ -1067,6 +1080,7 @@ export function staffEditablePricing(currentPricing: PricingSettings, candidateP
   const immutableCurrent = JSON.parse(JSON.stringify(current)) as Record<string, any>;
   delete immutableCandidate.dailyFormula; delete immutableCurrent.dailyFormula;
   delete immutableCandidate.scrapboardRates; delete immutableCurrent.scrapboardRates;
+  delete immutableCandidate.scrapboardBulkRates; delete immutableCurrent.scrapboardBulkRates;
   delete immutableCandidate.effectiveDate; delete immutableCurrent.effectiveDate;
   for(const key of ['scrapboardCategorySettings','scrapboardItemSettings'] as const){
     immutableCandidate[key]=pricingCatalogSettings(candidate as PricingSettings,key);
@@ -1084,6 +1098,7 @@ export function staffEditablePricing(currentPricing: PricingSettings, candidateP
   const next = JSON.parse(JSON.stringify(current)) as Record<string, any>;
   next.dailyFormula = { effectiveDate: candidateFormula.effectiveDate, baseRates: candidateBaseRates };
   next.scrapboardRates = Object.fromEntries(Object.entries(candidateScrapboardRates).map(([key,value])=>[key,Number(value)]));
+  next.scrapboardBulkRates = Object.fromEntries(Object.entries(candidateBulkRates).map(([key,value])=>[key,Number(value)]));
   next.effectiveDate = String(candidate.effectiveDate||candidateFormula.effectiveDate);
   for (const metal of metals) next[metal].overrides = candidate[metal]?.overrides ?? {};
   return next as PricingSettings;

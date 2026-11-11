@@ -118,6 +118,7 @@ function ensureShape() {
     db.pricing.dailyFormula.baseRates = db.pricing.dailyFormula.baseRates || {};
     db.pricing.publicDailyRates = db.pricing.publicDailyRates || null;
     db.pricing.scrapboardRates = db.pricing.scrapboardRates || {};
+    db.pricing.scrapboardBulkRates = db.pricing.scrapboardBulkRates || {};
     db.pricing.customScrapboardCategories = Array.isArray(db.pricing.customScrapboardCategories) ? db.pricing.customScrapboardCategories : [];
     db.pricing.customScrapboardItems = Array.isArray(db.pricing.customScrapboardItems) ? db.pricing.customScrapboardItems : [];
     db.pricing.scrapboardCategorySettings = db.pricing.scrapboardCategorySettings && typeof db.pricing.scrapboardCategorySettings === 'object' ? db.pricing.scrapboardCategorySettings : {};
@@ -127,6 +128,9 @@ function ensureShape() {
         const saved = Number(db.pricing.scrapboardRates[item.key]);
         if (!Number.isFinite(saved) || saved <= 0)
             db.pricing.scrapboardRates[item.key] = item.rate;
+        const bulkSaved = Number(db.pricing.scrapboardBulkRates[item.key]);
+        if (!Number.isFinite(bulkSaved) || bulkSaved <= 0)
+            db.pricing.scrapboardBulkRates[item.key] = db.pricing.scrapboardRates[item.key];
     });
     db.pricing.staffRateEditingUnlocked = Boolean(db.pricing.staffRateEditingUnlocked);
 }
@@ -239,6 +243,7 @@ function seedEmptyLedger() {
         auto: { enabled: false, lastFetchDate: '', lastAppliedDate: '', lastFetchedAt: '', usdPhp: 0, spotUsd: {}, draft: null },
         dailyFormula: { effectiveDate: todayStr(), baseRates: { Gold: 8500, Silver: 105, Platinum: 2450 } },
         scrapboardRates: Object.fromEntries(SCRAPBOARD_ITEMS.map(item => [item.key, item.rate])),
+        scrapboardBulkRates: Object.fromEntries(SCRAPBOARD_ITEMS.map(item => [item.key, item.rate])),
         staffRateEditingUnlocked: false,
         featured: { metal: 'Gold', key: '18K-BUO', low: 6360, high: 6560 }
     };
@@ -614,15 +619,18 @@ function addScrapboardItem(category, name, unit, rate) {
         const resolvedCategory = scrapboardCategoryEntry(group);
         if (!resolvedCategory || !label || !['kg', 'pc'].includes(normalizedUnit) || !Number.isInteger(numericRate) || numericRate <= 0)
             return false;
-        const beforeItems = [...(db.pricing.customScrapboardItems || [])], beforeRates = { ...(db.pricing.scrapboardRates || {}) };
+        const beforeItems = [...(db.pricing.customScrapboardItems || [])], beforeRates = { ...(db.pricing.scrapboardRates || {}) }, beforeBulkRates = { ...(db.pricing.scrapboardBulkRates || {}) };
         const item = { key: customScrapboardKey(label), label, rate: numericRate, unit: normalizedUnit, group: resolvedCategory.key };
         db.pricing.customScrapboardItems = [...beforeItems, item];
         db.pricing.scrapboardRates[item.key] = numericRate;
+        db.pricing.scrapboardBulkRates[item.key] = numericRate;
         if (await savePricingDB(false, 'catalog'))
             return true;
         db.pricing.customScrapboardItems = (db.pricing.customScrapboardItems || []).filter(value => value.key !== item.key);
         if (!db.pricing.customScrapboardItems.some(value => value.key === item.key))
             delete db.pricing.scrapboardRates[item.key];
+        if (!db.pricing.customScrapboardItems.some(value => value.key === item.key))
+            delete db.pricing.scrapboardBulkRates[item.key];
         return false;
     });
 }
@@ -644,7 +652,8 @@ function catalogPricingSnapshot() {
         customScrapboardItems: db.pricing.customScrapboardItems || [],
         scrapboardCategorySettings: db.pricing.scrapboardCategorySettings || {},
         scrapboardItemSettings: db.pricing.scrapboardItemSettings || {},
-        scrapboardRates: db.pricing.scrapboardRates || {}
+        scrapboardRates: db.pricing.scrapboardRates || {},
+        scrapboardBulkRates: db.pricing.scrapboardBulkRates || {}
     }));
 }
 function restoreCatalogPricing(snapshot) { Object.assign(db.pricing, snapshot); }
@@ -696,6 +705,9 @@ function deleteScrapboardItem(key) {
         const rates = { ...(db.pricing.scrapboardRates || {}) };
         delete rates[key];
         db.pricing.scrapboardRates = rates;
+        const bulkRates = { ...(db.pricing.scrapboardBulkRates || {}) };
+        delete bulkRates[key];
+        db.pricing.scrapboardBulkRates = bulkRates;
         if (await savePricingDB(false, 'catalog-management'))
             return true;
         restoreCatalogPricing(before);
@@ -814,12 +826,15 @@ function gradeLabel(metal, key) {
     return customPurity === null ? key : `${Number(customPurity.toFixed(2))}% purity`;
 }
 function distinctKarats(metal) { return metal === 'Scrapboard' ? scrapboardItems().map(item => item.key) : (GRADES[metal] || []); }
-function activeRate(metal, karat) {
+function normalizedScrapboardRateSheet(value) { return value === 'bulk' ? 'bulk' : 'normal'; }
+function scrapboardRateMap(sheet = 'normal') { return normalizedScrapboardRateSheet(sheet) === 'bulk' ? (db.pricing?.scrapboardBulkRates || {}) : (db.pricing?.scrapboardRates || {}); }
+function scrapboardRateSheetLabel(sheet = 'normal') { return normalizedScrapboardRateSheet(sheet) === 'bulk' ? 'Bulk Buyer Rate' : 'Normal Buying Rate'; }
+function activeRate(metal, karat, rateSheet = 'normal') {
     if (metal === 'Scrapboard') {
         const item = scrapboardItems().find(entry => entry.key === karat);
         if (!item)
             return null;
-        const configured = Number(db.pricing?.scrapboardRates?.[karat]);
+        const configured = Number(scrapboardRateMap(rateSheet)?.[karat]);
         return { rate: Number.isFinite(configured) && configured > 0 ? roundPeso(configured) : item.rate, effectiveDate: db.pricing.effectiveDate, unit: item.unit };
     }
     const isCustomPurity = customPurityFromKey(karat) !== null;
@@ -1464,7 +1479,8 @@ function scrapboardRateGroups() {
     }, initial);
 }
 let scrapboardRateSort = 'catalog';
-function scrapboardRateValue(item) { return roundPeso(db.pricing.scrapboardRates?.[item.key] || item.rate); }
+let scrapboardRateSheet = 'normal';
+function scrapboardRateValue(item) { return roundPeso(scrapboardRateMap(scrapboardRateSheet)?.[item.key] || item.rate); }
 function sortedScrapboardRateItems(items) {
     const sorted = [...items];
     if (scrapboardRateSort === 'high')
@@ -1476,6 +1492,12 @@ function sortedScrapboardRateItems(items) {
 function setScrapboardRateSort(value) {
     scrapboardRateSort = ['high', 'low'].includes(value) ? value : 'catalog';
     render();
+}
+function setScrapboardRateSheet(value) { scrapboardRateSheet = normalizedScrapboardRateSheet(value); render(); }
+function scrapboardRateSheetToggleMarkup(context = 'rates') {
+    const selected = context === 'buying' ? selectedBuyingRateSheet() : scrapboardRateSheet;
+    const handler = context === 'buying' ? 'setBuyingScrapboardRateSheet' : 'setScrapboardRateSheet';
+    return `<div class="scrap-sheet-toggle" role="group" aria-label="Pricing sheet"><button type="button" class="${selected === 'normal' ? 'is-active' : ''}" aria-pressed="${selected === 'normal'}" onclick="${handler}('normal')">Normal Buying Rate</button><button type="button" class="${selected === 'bulk' ? 'is-active' : ''}" aria-pressed="${selected === 'bulk'}" onclick="${handler}('bulk')">Bulk Buyer Rate</button></div>`;
 }
 function scrapboardIcChipSubcategory(value) {
     const match = String(value || '').match(/^IC\s*CHIPS?\s*(?:·|•|:|-)\s*(.+)$/i);
@@ -1650,18 +1672,19 @@ function renderRates() {
     const editable = canEditDailyRates();
     const groups = scrapboardRateGroups();
     const sections = scrapboardRateSections(Object.entries(groups));
+    const rateMap = scrapboardRateMap(scrapboardRateSheet), sheetLabel = scrapboardRateSheetLabel(scrapboardRateSheet);
     return `<section class="scrap-rate-hero">
-    <div><div class="eyebrow">SCRAPBOARD BUYING GUIDE</div><h2>Daily buying rates</h2><p>These are the active prices used automatically on the Buying page. Rates marked / kg use kilograms; rates marked / pc use individual pieces.</p></div>
+    <div><div class="eyebrow">SCRAPBOARD BUYING GUIDE · ${sheetLabel}</div><h2>Daily buying rates</h2><p>${scrapboardRateSheet === 'bulk' ? 'Use this sheet for bulk-buyer transactions.' : 'Use this sheet for regular buying transactions.'} Rates marked / kg use kilograms; rates marked / pc use individual pieces.</p></div>
     <div class="scrap-rate-hero-tools"><div class="scrap-rate-date"><small>Effective date</small><br><strong>${fmtDate(db.pricing.effectiveDate || todayStr())}</strong></div>${renderScrapboardRateDownloadButtons()}<label class="scrap-rate-sort"><span>Arrange by price</span><select onchange="setScrapboardRateSort(this.value)"><option value="catalog" ${scrapboardRateSort === 'catalog' ? 'selected' : ''}>Default order</option><option value="high" ${scrapboardRateSort === 'high' ? 'selected' : ''}>Highest to lowest</option><option value="low" ${scrapboardRateSort === 'low' ? 'selected' : ''}>Lowest to highest</option></select></label></div>
-  </section>
+  </section>${scrapboardRateSheetToggleMarkup('rates')}
   ${isAdmin() ? `<section class="scrap-quick-add"><div><div class="eyebrow">Quick add</div><h2>Add categories and buying items</h2><p>New items are saved to the shared rate list and appear automatically on the Buying page.</p></div><div class="scrap-quick-add-grid">
     <div class="scrap-quick-add-form"><h3>New category</h3><div class="field"><label for="quick_add_category_name">Category name</label><input id="quick_add_category_name" maxlength="80" placeholder="e.g. Charger boards"></div><button class="btn secondary small" type="button" onclick="submitScrapboardCategory()">Add category</button></div>
     <div class="scrap-quick-add-form"><h3>New item</h3><div class="field"><label for="quick_add_item_category">Category</label><select id="quick_add_item_category">${scrapboardCategoryOptions(scrapboardCategoryEntries())}</select></div><div class="field"><label for="quick_add_item_name">Item name</label><input id="quick_add_item_name" maxlength="100" placeholder="e.g. Type-C port"></div><div class="scrap-quick-add-row"><div class="field"><label for="quick_add_item_unit">Unit</label><select id="quick_add_item_unit"><option value="kg">kg</option><option value="pc">pc</option></select></div><div class="field"><label for="quick_add_item_rate">Starting rate</label><input id="quick_add_item_rate" type="number" min="1" step="1" placeholder="0"></div></div><button class="btn secondary small" type="button" onclick="submitScrapboardItem()">Add item</button></div>
   </div></section>${scrapboardCatalogManagementMarkup()}` : ''}
   ${sections.map(section => `<section class="scrap-rate-section"><h3>${esc(section.label)}</h3>${section.groups.map(group => `<div class="scrap-rate-subsection">${group.label ? `<h4>${esc(group.label)}</h4>` : ''}<div class="scrap-rate-grid">
-    ${group.items.map(item => `<div class="scrap-rate-card"><div><label for="scrap_rate_${item.key}">${esc(item.label)}</label><small>Philippine peso / ${item.unit}</small></div><div class="scrap-rate-input"><span>₱</span><input id="scrap_rate_${item.key}" type="number" min="1" step="1" value="${roundPeso(db.pricing.scrapboardRates?.[item.key] || item.rate)}" ${editable ? '' : 'readonly aria-readonly="true"'}></div></div>`).join('')}
+    ${group.items.map(item => `<div class="scrap-rate-card"><div><label for="scrap_rate_${item.key}">${esc(item.label)}</label><small>Philippine peso / ${item.unit}</small></div><div class="scrap-rate-input"><span>₱</span><input id="scrap_rate_${item.key}" type="number" min="1" step="1" value="${roundPeso(rateMap?.[item.key] || item.rate)}" ${editable ? '' : 'readonly aria-readonly="true"'}></div></div>`).join('')}
   </div></div>`).join('')}</section>`).join('')}
-  <div class="scrap-rate-actions"><span class="form-note">${editable ? 'Changes apply to new buying transactions.' : 'Rates are locked by the administrator.'}</span>${editable ? '<button class="btn" onclick="saveScrapboardRates()">Save daily rates</button>' : ''}</div>`;
+  <div class="scrap-rate-actions"><span class="form-note">${editable ? `Editing ${sheetLabel}. Changes apply to new buying transactions.` : 'Rates are locked by the administrator.'}</span>${editable ? `<button class="btn" onclick="saveScrapboardRates()">Save daily rates · ${sheetLabel}</button>` : ''}</div>`;
 }
 function renderScrapboardRateDownloadButtons() {
     const icon = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 15v4h14v-4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -1671,6 +1694,7 @@ async function downloadScrapboardRateSheetImage(imageType = 'png') {
     const groups = Object.entries(scrapboardRateGroups());
     const sections = scrapboardRateSections(groups);
     const rateSheetDate = db.pricing.effectiveDate || todayStr();
+    const selectedRateMap = scrapboardRateMap(scrapboardRateSheet), selectedSheetLabel = scrapboardRateSheetLabel(scrapboardRateSheet);
     const mimeType = imageType === 'png' ? 'image/png' : 'image/jpeg';
     const imageLabel = imageType.toUpperCase();
     const button = document.getElementById(`scrapboard_rate_download_${imageType}`);
@@ -1712,10 +1736,10 @@ async function downloadScrapboardRateSheetImage(imageType = 'png') {
         ctx.fill();
         text('SB', pad + 58, 114, '800 42px Arial, sans-serif', colors.header, 'center');
         text('SCRAPBOARD TRADING', pad + 152, 94, '700 52px Georgia, serif', colors.cream);
-        text('DAILY BUYING RATE GUIDE', pad + 152, 132, '700 20px Arial, sans-serif', colors.accent);
+        text(selectedSheetLabel.toUpperCase(), pad + 152, 132, '700 20px Arial, sans-serif', colors.accent);
         text('All prices shown in Philippine pesos per kilogram or piece', pad + 152, 164, '18px Arial, sans-serif', '#D3DDDA');
         text(fmtDate(rateSheetDate).toUpperCase(), width - pad, 86, '700 22px Arial, sans-serif', colors.cream, 'right');
-        text('CURRENT SCRAPBOARD RATE SHEET', width - pad, 124, '17px Arial, sans-serif', '#D3DDDA', 'right');
+        text(`CURRENT ${selectedSheetLabel.toUpperCase()}`, width - pad, 124, '17px Arial, sans-serif', '#D3DDDA', 'right');
         text(`${scrapboardItems().length} ACTIVE BUYING ITEMS`, width - pad, 159, '700 16px Arial, sans-serif', colors.accent, 'right');
         const cardWidth = (width - pad * 2 - gap * (columns - 1)) / columns;
         let y = headerHeight + 30;
@@ -1754,7 +1778,7 @@ async function downloadScrapboardRateSheetImage(imageType = 'png') {
                     const labelFont = '700 20px Arial, sans-serif';
                     text(clippedText(item.label, cardWidth - 46, labelFont), x + 22, cardY + 37, labelFont, colors.soft);
                     text('₱', x + 22, cardY + 91, '700 26px Arial, sans-serif', colors.accentDeep);
-                    const rate = roundPeso(db.pricing.scrapboardRates?.[item.key] || item.rate);
+                    const rate = roundPeso(selectedRateMap?.[item.key] || item.rate);
                     text(money(rate), x + 57, cardY + 94, '700 38px Arial, sans-serif');
                     text(`PER ${item.unit.toUpperCase()}`, x + cardWidth - 21, cardY + 91, '700 13px Arial, sans-serif', colors.soft, 'right');
                     text('BUYING RATE', x + 22, cardY + 117, '700 12px Arial, sans-serif', colors.accentDeep);
@@ -1769,19 +1793,19 @@ async function downloadScrapboardRateSheetImage(imageType = 'png') {
         ctx.moveTo(pad, height - 55);
         ctx.lineTo(width - pad, height - 55);
         ctx.stroke();
-        text('SCRAPBOARD TRADING  ·  DAILY BUYING RATE GUIDE', pad, height - 25, '700 14px Arial, sans-serif', colors.soft);
+        text(`SCRAPBOARD TRADING  ·  ${selectedSheetLabel.toUpperCase()}`, pad, height - 25, '700 14px Arial, sans-serif', colors.soft);
         text(`Generated ${new Date().toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })}`, width - pad, height - 25, '15px Arial, sans-serif', colors.soft, 'right');
         const blob = await new Promise(resolve => canvas.toBlob(resolve, mimeType, imageType === 'jpg' ? .94 : undefined));
         if (!blob)
             throw new Error(`${imageLabel} generation failed`);
-        const filename = `scrapboard-daily-rates-${rateSheetDate}.${imageType}`, url = URL.createObjectURL(blob), link = document.createElement('a');
+        const filename = `scrapboard-${scrapboardRateSheet}-rates-${rateSheetDate}.${imageType}`, url = URL.createObjectURL(blob), link = document.createElement('a');
         link.href = url;
         link.download = filename;
         document.body.appendChild(link);
         link.click();
         link.remove();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
-        toast(`Scrapboard daily rates ${imageLabel} downloaded`);
+        toast(`${selectedSheetLabel} ${imageLabel} downloaded`);
     }
     catch (error) {
         console.error(`Scrapboard rate sheet ${imageLabel} download failed`, error);
@@ -1802,7 +1826,7 @@ async function saveScrapboardRates() {
         toast('Daily rates are locked by the administrator');
         return;
     }
-    const next = { ...(db.pricing.scrapboardRates || {}) };
+    const next = { ...scrapboardRateMap(scrapboardRateSheet) };
     for (const item of scrapboardItems()) {
         const rate = roundPeso(Number(val(`scrap_rate_${item.key}`)));
         if (!Number.isFinite(rate) || rate <= 0) {
@@ -1812,11 +1836,14 @@ async function saveScrapboardRates() {
         }
         next[item.key] = rate;
     }
-    db.pricing.scrapboardRates = next;
+    if (scrapboardRateSheet === 'bulk')
+        db.pricing.scrapboardBulkRates = next;
+    else
+        db.pricing.scrapboardRates = next;
     db.pricing.effectiveDate = todayStr();
     if (await savePricingDB()) {
         render();
-        toast('Scrapboard daily rates saved');
+        toast(`${scrapboardRateSheetLabel(scrapboardRateSheet)} saved`);
     }
 }
 async function submitScrapboardCategory() {
@@ -2931,7 +2958,7 @@ function buyingDraftValue(key, fallback = '') {
     return element ? element.value : String(buyingDraftForm[key] ?? fallback);
 }
 function captureBuyingDraftForm() {
-    ['b_seller_name', 'b_date', 'b_pay', 'b_metal', 'b_itemtype', 'b_karat', 'b_custom_purity', 'b_gross', 'b_ded', 'b_rate', 'b_payout', 'b_staff', 'b_status', 'b_remarks'].forEach(key => {
+    ['b_seller_name', 'b_date', 'b_pay', 'b_metal', 'b_itemtype', 'b_karat', 'b_custom_purity', 'b_gross', 'b_ded', 'b_rate', 'b_rate_sheet', 'b_payout', 'b_staff', 'b_status', 'b_remarks'].forEach(key => {
         const element = document.getElementById(key);
         if (element)
             buyingDraftForm[key] = element.type === 'checkbox' ? (element.checked ? 'true' : 'false') : element.value;
@@ -2993,7 +3020,7 @@ async function clearBuyingDraft() {
     buyingDraftForm = {};
     buyingDraftSavedDate = '';
     buyingDraftLoaded = true;
-    const defaults = { b_seller_name: '', b_date: '', b_pay: 'Cash', b_metal: 'Gold', b_itemtype: 'Scrap', b_karat: '', b_custom_purity: '', b_gross: '', b_ded: '', b_rate: '', b_payout: '', b_staff: '', b_status: 'Available', b_remarks: '' };
+    const defaults = { b_seller_name: '', b_date: '', b_pay: 'Cash', b_metal: 'Gold', b_itemtype: 'Scrap', b_karat: '', b_custom_purity: '', b_gross: '', b_ded: '', b_rate: '', b_rate_sheet: 'normal', b_payout: '', b_staff: '', b_status: 'Available', b_remarks: '' };
     Object.entries(defaults).forEach(([id, value]) => { const input = document.getElementById(id); if (!input)
         return; if (input.type === 'checkbox')
         input.checked = value === 'true';
@@ -7451,12 +7478,13 @@ function exportCustomers() {
         { label: 'Name', key: 'name' }, { label: 'Contact', key: 'contact' }, { label: 'Notes', key: 'notes' }
     ]));
 }
-function scrapboardRateExportRows() {
-    return scrapboardItems().map(item => ({ effectiveDate: db.pricing.effectiveDate || todayStr(), category: item.group, classification: item.label, unit: item.unit, rate: Number(db.pricing.scrapboardRates?.[item.key] ?? item.rate) }));
+function scrapboardRateExportRows(sheet = scrapboardRateSheet) {
+    const normalizedSheet = normalizedScrapboardRateSheet(sheet), rates = scrapboardRateMap(normalizedSheet);
+    return scrapboardItems().map(item => ({ effectiveDate: db.pricing.effectiveDate || todayStr(), rateSheet: scrapboardRateSheetLabel(normalizedSheet), category: item.group, classification: item.label, unit: item.unit, rate: Number(rates?.[item.key] ?? item.rate) }));
 }
 function exportRates() {
-    downloadCSV('scrapboard_daily_rates.csv', toCSV(scrapboardRateExportRows(), [
-        { label: 'Effective date', key: 'effectiveDate' }, { label: 'Category', key: 'category' }, { label: 'Classification', key: 'classification' }, { label: 'Unit', key: 'unit' }, { label: 'Rate', key: 'rate' }
+    downloadCSV(`scrapboard_${scrapboardRateSheet}_rates.csv`, toCSV(scrapboardRateExportRows(), [
+        { label: 'Effective date', key: 'effectiveDate' }, { label: 'Rate sheet', key: 'rateSheet' }, { label: 'Category', key: 'category' }, { label: 'Classification', key: 'classification' }, { label: 'Unit', key: 'unit' }, { label: 'Rate', key: 'rate' }
     ]));
 }
 function closeCustomerHistoryModal() { document.getElementById('customer_history_modal')?.remove(); }
@@ -7700,6 +7728,15 @@ function closeScrapboardBuyingSearchSoon() {
         input.value = input.dataset.selectedLabel || ''; }, 180);
 }
 function selectScrapboardBuyingItem(token) { handleScrapboardItemChange(decodeURIComponent(token)); }
+function selectedBuyingRateSheet() { return normalizedScrapboardRateSheet(buyingDraftValue('b_rate_sheet', 'normal')); }
+function setBuyingScrapboardRateSheet(value) {
+    const sheet = normalizedScrapboardRateSheet(value), input = document.getElementById('b_rate_sheet');
+    buyingDraftForm.b_rate_sheet = sheet;
+    buyingDraftForm.b_rate_overridden = 'false';
+    if (input)
+        input.value = sheet;
+    handleScrapboardItemChange(selectedBuyingGrade());
+}
 function renderBuying() {
     rollDefaultBuyingDraftDateForward();
     const activeItems = scrapboardItems();
@@ -7710,7 +7747,8 @@ function renderBuying() {
     const customerStatus = !sellerName ? 'Optional — leave blank for a walk-in seller.' : savedCustomer ? `Using saved seller: ${savedCustomer.name}` : `“${sellerName}” will be saved as a new seller.`;
     const requested = buyingDraftValue('b_karat');
     const key = activeItems.some(item => item.key === requested) ? requested : activeItems[0].key;
-    const item = scrapboardItem(key), rateObj = activeRate('Scrapboard', key);
+    const buyingRateSheet = normalizedScrapboardRateSheet(buyingDraftValue('b_rate_sheet', 'normal'));
+    const item = scrapboardItem(key), rateObj = activeRate('Scrapboard', key, buyingRateSheet);
     const quantityValue = buyingDraftValue('b_gross'), quantity = parseFloat(quantityValue) || 0;
     const systemRate = roundPeso(rateObj?.rate || 0), enteredRate = buyingDraftValue('b_rate'), parsedRate = Number(enteredRate);
     const rateOverrideAllowed = canOverrideBuyingRate(), savedOverride = rateOverrideAllowed && buyingDraftForm.b_rate_overridden === 'true';
@@ -7731,15 +7769,16 @@ function renderBuying() {
     </div></div>
     <div class="buying-step buying-item-step"><div class="step-number">2</div><div class="step-content">
       <h2>Add scrapboard item</h2><p>Choose the classification and enter the quantity. The active daily rate is applied automatically.</p>
+      <div class="scrap-buying-sheet-row"><div><strong>Pricing sheet</strong><span>${scrapboardRateSheetLabel(buyingRateSheet)} will be used for this item.</span></div>${scrapboardRateSheetToggleMarkup('buying')}</div>
       <div class="form-grid buying-item-grid">
-        <input id="b_metal" type="hidden" value="Scrapboard"><input id="b_itemtype" type="hidden" value="Scrapboard"><input id="b_ded" type="hidden" value="0"><input id="b_status" type="hidden" value="Available">
+        <input id="b_metal" type="hidden" value="Scrapboard"><input id="b_itemtype" type="hidden" value="Scrapboard"><input id="b_ded" type="hidden" value="0"><input id="b_status" type="hidden" value="Available"><input id="b_rate_sheet" type="hidden" value="${buyingRateSheet}">
         <div class="field scrap-item-picker"><label>Scrapboard category</label><div class="scrap-category-choices" role="group" aria-label="Scrapboard categories">${sections.map(section => `<button type="button" class="scrap-category-choice ${section.label === selectedSection.label ? 'is-active' : ''}" aria-pressed="${section.label === selectedSection.label}" onclick="setScrapboardBuyingCategory('${encodeURIComponent(section.label)}')"><span>${esc(section.label)}</span><small>${section.items.length}</small></button>`).join('')}</div></div>
-        <div class="field scrap-classification-search"><label for="b_item_search">Search classification</label><input id="b_karat" type="hidden" value="${esc(key)}"><div class="scrap-search-combobox"><input id="b_item_search" value="${esc(selectedSearchLabel)}" data-selected-label="${esc(selectedSearchLabel)}" placeholder="Type a classification" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="b_item_search_results" onfocus="openScrapboardBuyingSearch(this)" oninput="filterScrapboardBuyingItems(this.value)" onblur="closeScrapboardBuyingSearchSoon()"><div id="b_item_search_results" class="scrap-search-results is-hidden" role="listbox">${selectedSection.items.map(option => `<button type="button" role="option" aria-selected="${option.key === key}" data-scrap-search-item onclick="selectScrapboardBuyingItem('${encodeURIComponent(option.key)}')"><span><strong>${esc(option.label)}</strong>${option.subcategory ? `<small>${esc(option.subcategory)}</small>` : ''}</span><b>${fmtMoney(db.pricing.scrapboardRates?.[option.key] || option.rate)}/${option.unit}</b></button>`).join('')}<div class="scrap-search-empty is-hidden" data-scrap-search-empty>No matching classification</div></div></div><span class="scrap-rate-note">Selected: ${esc(selectedSection.label)} · ${esc(selectedSearchLabel)}</span></div>
+        <div class="field scrap-classification-search"><label for="b_item_search">Search classification</label><input id="b_karat" type="hidden" value="${esc(key)}"><div class="scrap-search-combobox"><input id="b_item_search" value="${esc(selectedSearchLabel)}" data-selected-label="${esc(selectedSearchLabel)}" placeholder="Type a classification" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="b_item_search_results" onfocus="openScrapboardBuyingSearch(this)" oninput="filterScrapboardBuyingItems(this.value)" onblur="closeScrapboardBuyingSearchSoon()"><div id="b_item_search_results" class="scrap-search-results is-hidden" role="listbox">${selectedSection.items.map(option => `<button type="button" role="option" aria-selected="${option.key === key}" data-scrap-search-item onclick="selectScrapboardBuyingItem('${encodeURIComponent(option.key)}')"><span><strong>${esc(option.label)}</strong>${option.subcategory ? `<small>${esc(option.subcategory)}</small>` : ''}</span><b>${fmtMoney(scrapboardRateMap(buyingRateSheet)?.[option.key] || option.rate)}/${option.unit}</b></button>`).join('')}<div class="scrap-search-empty is-hidden" data-scrap-search-empty>No matching classification</div></div></div><span class="scrap-rate-note">Selected: ${esc(selectedSection.label)} · ${esc(selectedSearchLabel)}</span></div>
         <div class="field"><label for="b_gross">Quantity</label><div class="scrap-quantity-wrap"><input id="b_gross" type="number" min="0" step="${item.unit === 'kg' ? '0.01' : '1'}" value="${esc(quantityValue)}" placeholder="0" oninput="recalcBuying();scheduleBuyingDraftSave()"><span class="scrap-unit" id="scrap_unit">${item.unit}</span></div><span class="scrap-rate-note">Rate is per ${item.unit === 'kg' ? 'kilogram' : 'piece'}.</span></div>
       </div>
       <div class="payout-calculator">
         <div><span>Quantity</span><strong id="b_net_display">${quantity.toLocaleString('en-PH', { maximumFractionDigits: 2 })} ${item.unit}</strong></div>
-        <div class="buying-rate ${rateOverridden ? 'is-overridden' : ''}" id="b_rate_panel"><label id="b_rate_label" for="b_rate">${rateOverridden ? 'Rate override' : 'Daily buying rate'}</label><div><span>₱</span><input id="b_rate" type="number" min="1" step="1" value="${rate}" ${rateOverrideAllowed ? 'onfocus="selectBuyingOverrideValue(this)" oninput="markBuyingRateOverride();recalcBuying();scheduleBuyingDraftSave()"' : 'readonly aria-readonly="true"'}><span>/${item.unit}</span></div><span id="b_daily_rate_reference" class="daily-rate-reference ${rateOverridden ? '' : 'is-hidden'}">Daily rate: ${fmtMoney(systemRate)}/${item.unit}</span><button type="button" id="b_rate_reset" class="rate-reset ${rateOverridden ? '' : 'is-hidden'}" onclick="resetBuyingRate();scheduleBuyingDraftSave()">Use daily rate</button></div>
+        <div class="buying-rate ${rateOverridden ? 'is-overridden' : ''}" id="b_rate_panel"><label id="b_rate_label" for="b_rate">${rateOverridden ? 'Rate override' : scrapboardRateSheetLabel(buyingRateSheet)}</label><div><span>₱</span><input id="b_rate" type="number" min="1" step="1" value="${rate}" ${rateOverrideAllowed ? 'onfocus="selectBuyingOverrideValue(this)" oninput="markBuyingRateOverride();recalcBuying();scheduleBuyingDraftSave()"' : 'readonly aria-readonly="true"'}><span>/${item.unit}</span></div><span id="b_daily_rate_reference" class="daily-rate-reference ${rateOverridden ? '' : 'is-hidden'}">${scrapboardRateSheetLabel(buyingRateSheet)}: ${fmtMoney(systemRate)}/${item.unit}</span><button type="button" id="b_rate_reset" class="rate-reset ${rateOverridden ? '' : 'is-hidden'}" onclick="resetBuyingRate();scheduleBuyingDraftSave()">Use sheet rate</button></div>
         <div class="suggested"><span>Calculated amount</span><strong id="b_suggested_display">${fmtMoney(suggested)}</strong></div>
         <div class="final-payout"><label for="b_payout">Final payout</label><div><span>₱</span><input id="b_payout" type="number" min="0" step="1" value="${esc(buyingDraftValue('b_payout'))}" placeholder="${suggested}" oninput="scheduleBuyingDraftSave()"></div></div>
       </div>
@@ -7754,7 +7793,7 @@ function handleScrapboardItemChange(key) {
     const selection = document.getElementById('b_karat');
     if (selection)
         selection.value = key;
-    const item = scrapboardItem(key), active = activeRate('Scrapboard', key), rateInput = document.getElementById('b_rate'), unit = document.getElementById('scrap_unit');
+    const item = scrapboardItem(key), active = activeRate('Scrapboard', key, selectedBuyingRateSheet()), rateInput = document.getElementById('b_rate'), unit = document.getElementById('scrap_unit');
     if (rateInput)
         rateInput.value = String(roundPeso(active?.rate || 0));
     if (unit)
@@ -7764,7 +7803,7 @@ function handleScrapboardItemChange(key) {
     render();
 }
 function recalcBuying() {
-    const key = selectedBuyingGrade(), item = scrapboardItem(key), quantity = parseFloat(val('b_gross')) || 0, rateObj = activeRate('Scrapboard', key), systemRate = roundPeso(rateObj?.rate || 0);
+    const key = selectedBuyingGrade(), item = scrapboardItem(key), quantity = parseFloat(val('b_gross')) || 0, rateObj = activeRate('Scrapboard', key, selectedBuyingRateSheet()), systemRate = roundPeso(rateObj?.rate || 0);
     const rateInput = document.getElementById('b_rate');
     if (!canOverrideBuyingRate() && rateInput)
         rateInput.value = String(systemRate);
@@ -7792,7 +7831,7 @@ function purchaseItemFromForm() {
         toast('Piece quantity must be a whole number');
         return null;
     }
-    const rateObj = activeRate('Scrapboard', key), systemRate = roundPeso(rateObj?.rate || 0), rate = canOverrideBuyingRate() ? roundPeso(Number(val('b_rate'))) : systemRate;
+    const rateSheet = selectedBuyingRateSheet(), rateObj = activeRate('Scrapboard', key, rateSheet), systemRate = roundPeso(rateObj?.rate || 0), rate = canOverrideBuyingRate() ? roundPeso(Number(val('b_rate'))) : systemRate;
     if (!Number.isFinite(rate) || rate <= 0) {
         toast('Enter a valid buying rate');
         return null;
@@ -7803,13 +7842,13 @@ function purchaseItemFromForm() {
         return null;
     }
     const inventoryWeight = definition.unit === 'kg' ? roundWeight(quantity * 1000) : quantity;
-    return { id: uid('line'), metal: 'Scrapboard', itemType: 'Scrapboard', karat: key, scrapboardCategoryKey: scrapboardItemCategoryKey(key), unit: definition.unit, purchaseQuantity: quantity, grossWeight: inventoryWeight, deductions: 0, netWeight: inventoryWeight, currentWeight: inventoryWeight, rate, systemRate, rateOverridden: rate !== systemRate, payoutOverridden: payout !== suggested, suggestedAmount: suggested, payout, remarks: val('b_remarks').trim(), overrideReason: '' };
+    return { id: uid('line'), metal: 'Scrapboard', itemType: 'Scrapboard', karat: key, scrapboardCategoryKey: scrapboardItemCategoryKey(key), scrapboardRateSheet: rateSheet, unit: definition.unit, purchaseQuantity: quantity, grossWeight: inventoryWeight, deductions: 0, netWeight: inventoryWeight, currentWeight: inventoryWeight, rate, systemRate, rateOverridden: rate !== systemRate, payoutOverridden: payout !== suggested, suggestedAmount: suggested, payout, remarks: val('b_remarks').trim(), overrideReason: '' };
 }
 function renderPurchaseBatchPanelMarkup() {
     const total = roundMoney(purchaseBatch.reduce((sum, item) => sum + Number(item.payout), 0));
     if (!purchaseBatch.length)
         return `<h2 class="block-title">Current payout</h2><div class="empty-note">Choose a scrapboard classification and add the first item.</div>`;
-    return `<section class="current-payout-card"><div class="current-payout-compact"><div><span>Current payout · ${purchaseBatch.length} item${purchaseBatch.length === 1 ? '' : 's'}</span><strong>${fmtMoney(total)}</strong></div></div><div class="purchase-batch-list"><h3>Items in this payout</h3><div class="table-wrap"><table class="purchase-batch-table"><thead><tr><th>#</th><th>Classification</th><th>Quantity</th><th>Rate</th><th>Payout</th><th></th></tr></thead><tbody>${purchaseBatch.map((item, index) => `<tr><td>${index + 1}</td><td><strong>${esc(gradeLabel('Scrapboard', item.karat))}</strong><label class="purchase-item-remarks" for="purchase_item_remarks_${esc(item.id)}"><span>Remarks for this item</span><textarea id="purchase_item_remarks_${esc(item.id)}" rows="2" placeholder="Optional" oninput="updatePurchaseBatchItemRemarks('${item.id}',this.value)">${esc(item.remarks || '')}</textarea></label></td><td class="num">${purchaseQuantityLabel(item)}</td><td class="num">${fmtMoney(item.rate)}/${item.unit || 'unit'}</td><td class="num"><strong>${fmtMoney(item.payout)}</strong></td><td><button class="btn secondary small" onclick="requestPurchaseItemRemoval('${item.id}')">Remove</button></td></tr>`).join('')}</tbody></table></div></div><div class="form-actions purchase-batch-actions"><button class="btn secondary" onclick="continueAddingPurchaseItems()">Add another item</button><button class="btn" onclick="openPurchaseSummary()">Proceed to payout</button></div></section>`;
+    return `<section class="current-payout-card"><div class="current-payout-compact"><div><span>Current payout · ${purchaseBatch.length} item${purchaseBatch.length === 1 ? '' : 's'}</span><strong>${fmtMoney(total)}</strong></div></div><div class="purchase-batch-list"><h3>Items in this payout</h3><div class="table-wrap"><table class="purchase-batch-table"><thead><tr><th>#</th><th>Classification</th><th>Quantity</th><th>Rate</th><th>Payout</th><th></th></tr></thead><tbody>${purchaseBatch.map((item, index) => `<tr><td>${index + 1}</td><td><strong>${esc(gradeLabel('Scrapboard', item.karat))}</strong><span class="rate-sheet-badge">${esc(scrapboardRateSheetLabel(item.scrapboardRateSheet))}</span><label class="purchase-item-remarks" for="purchase_item_remarks_${esc(item.id)}"><span>Remarks for this item</span><textarea id="purchase_item_remarks_${esc(item.id)}" rows="2" placeholder="Optional" oninput="updatePurchaseBatchItemRemarks('${item.id}',this.value)">${esc(item.remarks || '')}</textarea></label></td><td class="num">${purchaseQuantityLabel(item)}</td><td class="num">${fmtMoney(item.rate)}/${item.unit || 'unit'}</td><td class="num"><strong>${fmtMoney(item.payout)}</strong></td><td><button class="btn secondary small" onclick="requestPurchaseItemRemoval('${item.id}')">Remove</button></td></tr>`).join('')}</tbody></table></div></div><div class="form-actions purchase-batch-actions"><button class="btn secondary" onclick="continueAddingPurchaseItems()">Add another item</button><button class="btn" onclick="openPurchaseSummary()">Proceed to payout</button></div></section>`;
 }
 function openPurchaseSummary() {
     if (!purchaseBatch.length) {
@@ -7821,7 +7860,7 @@ function openPurchaseSummary() {
     const modal = document.createElement('div');
     modal.id = 'purchase_summary_modal';
     modal.className = 'modal-backdrop';
-    modal.innerHTML = `<div class="summary-modal" role="dialog" aria-modal="true"><div class="summary-modal-head"><div><div class="eyebrow">Payout review</div><h2>${customer.name ? esc(customer.name) : 'Walk-in seller'}</h2></div><button class="modal-close" onclick="closePurchaseSummary()">×</button></div><div class="summary-lines">${purchaseBatch.map((item, index) => `<div class="summary-line"><div><strong>${index + 1}. ${esc(gradeLabel('Scrapboard', item.karat))}</strong><span>${purchaseQuantityLabel(item)} × ${fmtMoney(item.rate)}/${item.unit}</span></div><strong>${fmtMoney(item.payout)}</strong></div>`).join('')}</div><div class="summary-grand"><div><span>${purchaseBatch.length} classification${purchaseBatch.length === 1 ? '' : 's'}</span><strong>Grand total</strong></div><div>${fmtMoney(total)}</div></div><div class="summary-meta">${fmtDate(val('b_date') || todayStr())} · ${esc(val('b_pay'))} · ${esc(currentUser?.displayName || 'Staff')}</div><div class="form-actions"><button class="btn secondary" onclick="closePurchaseSummary()">Back</button><button class="btn secondary" onclick="commitPurchaseBatch(false)">Record only</button><button class="btn" onclick="commitPurchaseBatch(true)">Confirm &amp; receipt</button></div></div>`;
+    modal.innerHTML = `<div class="summary-modal" role="dialog" aria-modal="true"><div class="summary-modal-head"><div><div class="eyebrow">Payout review</div><h2>${customer.name ? esc(customer.name) : 'Walk-in seller'}</h2></div><button class="modal-close" onclick="closePurchaseSummary()">×</button></div><div class="summary-lines">${purchaseBatch.map((item, index) => `<div class="summary-line"><div><strong>${index + 1}. ${esc(gradeLabel('Scrapboard', item.karat))}</strong><span>${purchaseQuantityLabel(item)} × ${fmtMoney(item.rate)}/${item.unit} · ${esc(scrapboardRateSheetLabel(item.scrapboardRateSheet))}</span></div><strong>${fmtMoney(item.payout)}</strong></div>`).join('')}</div><div class="summary-grand"><div><span>${purchaseBatch.length} classification${purchaseBatch.length === 1 ? '' : 's'}</span><strong>Grand total</strong></div><div>${fmtMoney(total)}</div></div><div class="summary-meta">${fmtDate(val('b_date') || todayStr())} · ${esc(val('b_pay'))} · ${esc(currentUser?.displayName || 'Staff')}</div><div class="form-actions"><button class="btn secondary" onclick="closePurchaseSummary()">Back</button><button class="btn secondary" onclick="commitPurchaseBatch(false)">Record only</button><button class="btn" onclick="commitPurchaseBatch(true)">Confirm &amp; receipt</button></div></div>`;
     modal.addEventListener('click', event => { if (event.target === modal)
         closePurchaseSummary(); });
     document.body.appendChild(modal);

@@ -9,8 +9,9 @@ async function loadScrapboardRates() {
   vm.runInContext(`${source}\nseedEmptyLedger(); ensureShape();
     globalThis.scrapboardRateTestApi = {
       items: () => SCRAPBOARD_ITEMS,
-      rate: key => activeRate('Scrapboard', key),
-      setRate: (key, value) => { db.pricing.scrapboardRates[key] = value; }
+      rate: (key, sheet = 'normal') => activeRate('Scrapboard', key, sheet),
+      setRate: (key, value) => { db.pricing.scrapboardRates[key] = value; },
+      setBulkRate: (key, value) => { db.pricing.scrapboardBulkRates[key] = value; }
     };`, context);
   return context.scrapboardRateTestApi;
 }
@@ -35,4 +36,13 @@ test('buying lookup uses the saved daily scrapboard rate', async () => {
     effectiveDate: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()),
     unit: 'kg'
   });
+});
+
+test('bulk buyer lookup stays independent from the normal buying rate', async () => {
+  const api = await loadScrapboardRates();
+  api.setRate('A6', 1500);
+  api.setBulkRate('A6', 1800);
+
+  assert.equal(api.rate('A6', 'normal').rate, 1500);
+  assert.equal(api.rate('A6', 'bulk').rate, 1800);
 });

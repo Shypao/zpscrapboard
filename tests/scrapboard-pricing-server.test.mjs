@@ -80,6 +80,20 @@ test('staff rate validation accepts persisted custom item keys without catalog c
   assert.deepEqual(result.customScrapboardItems, currentPricing.customScrapboardItems);
 });
 
+test('staff rate validation saves normal and bulk buyer rates independently', () => {
+  const current = structuredClone(currentPricing);
+  current.scrapboardBulkRates = { A6: 1700, CUSTOM_NEW: 30 };
+  const candidate = structuredClone(current);
+  candidate.scrapboardRates.A6 = 1550;
+  candidate.scrapboardBulkRates.A6 = 1850;
+  const result = serverPricingProbe(`
+    const result = server.staffEditablePricing(${JSON.stringify(current)}, ${JSON.stringify(candidate)});
+    process.stdout.write(JSON.stringify(result));
+  `);
+  assert.equal(result.scrapboardRates.A6, 1550);
+  assert.equal(result.scrapboardBulkRates.A6, 1850);
+});
+
 test('legacy pricing passes through the internal update pipeline for staff saves', () => {
   const candidate = structuredClone(currentPricing);
   candidate.scrapboardRates.A6 = 1600;

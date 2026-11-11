@@ -40,6 +40,10 @@ async function loadCustomItemApi() {
       itemEditor: key => scrapboardItemEditorMarkup(key),
       setCatalogExpanded: value => rememberScrapboardCatalogExpanded(value),
       setRateSort: value => { scrapboardRateSort = value; },
+      setRateSheet: value => { scrapboardRateSheet = normalizedScrapboardRateSheet(value); },
+      setBuyingRateSheet: value => { buyingDraftForm.b_rate_sheet = normalizedScrapboardRateSheet(value); },
+      setNormalRate: (key, value) => { db.pricing.scrapboardRates[key] = value; },
+      setBulkRate: (key, value) => { db.pricing.scrapboardBulkRates[key] = value; },
       selectBuyingItemWithDom: (key, current = 'NC512') => {
         const elements = {
           b_karat: { value: current, type: 'hidden' },
@@ -55,7 +59,7 @@ async function loadCustomItemApi() {
       },
       lookup: key => ({ ...scrapboardItem(key) }),
       label: key => gradeLabel('Scrapboard', key),
-      activeRate: key => ({ ...activeRate('Scrapboard', key) }),
+      activeRate: (key, sheet = 'normal') => ({ ...activeRate('Scrapboard', key, sheet) }),
       exportRowsAvailable: () => typeof scrapboardRateExportRows === 'function',
       exportRows: () => Array.from(scrapboardRateExportRows(), row => ({ ...row })),
       addCategory: value => addScrapboardCategory(value),
@@ -333,10 +337,33 @@ test('downloadable scrapboard overview uses the active catalog groups and rates'
   const generator = source.match(/async function downloadScrapboardRateSheetImage\([\s\S]*?\n\}/)?.[0] || '';
 
   assert.match(generator, /scrapboardRateGroups\(\)/);
-  assert.match(generator, /db\.pricing\.scrapboardRates/);
+  assert.match(generator, /scrapboardRateMap\(scrapboardRateSheet\)/);
   assert.match(generator, /scrapboardRateSections\(groups\)/);
   assert.match(generator, /SCRAPBOARD TRADING/);
   assert.doesNotMatch(generator, /GOLD_GRADES|SILVER_GRADES|PLATINUM_GRADES/);
+});
+
+test('Daily Rates and Buying expose separate normal and bulk buyer sheets', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  api.setNormalRate('A6', 1500);
+  api.setBulkRate('A6', 1800);
+
+  const normalRates = api.renderRates();
+  assert.match(normalRates, /Normal Buying Rate/);
+  assert.match(normalRates, /Bulk Buyer Rate/);
+  assert.match(normalRates, /value="1500"/);
+
+  api.setRateSheet('bulk');
+  const bulkRates = api.renderRates();
+  assert.match(bulkRates, /Editing Bulk Buyer Rate/);
+  assert.match(bulkRates, /value="1800"/);
+
+  api.setBuyingRateSheet('bulk');
+  const buying = api.renderBuying();
+  assert.match(buying, /Bulk Buyer Rate will be used for this item/);
+  assert.match(buying, /id="b_rate_sheet"[^>]*value="bulk"/);
+  assert.equal(api.activeRate('A6', 'bulk').rate, 1800);
 });
 
 test('downloadable scrapboard overview uses an HD canvas and larger five-column cards', async () => {
