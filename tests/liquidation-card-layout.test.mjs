@@ -28,3 +28,12 @@ test('open liquidation batch summaries use the full card width without excess em
   assert.match(stylesheet, /\.liquidation-batch-karat-totals>\.table-wrap\{width:100%;max-width:none/);
   assert.match(stylesheet, /\.liquidation-batch-compact-summary\{display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)/);
 });
+
+test('buying payout cards use shrinkable responsive columns at intermediate widths', async () => {
+  const stylesheet = await readFile(indexPath, 'utf8');
+
+  assert.match(stylesheet, /\.payout-calculator\{display:grid;grid-template-columns:repeat\(auto-fit,minmax\(220px,1fr\)/);
+  assert.match(stylesheet, /\.payout-calculator>div\{[^}]*min-width:0/);
+  assert.match(stylesheet, /\.scrap-quantity-wrap\{[^}]*min-width:0/);
+  assert.match(stylesheet, /\.scrap-buying-sheet-row>div:first-child\{[^}]*min-width:0/);
+});

@@ -69,6 +69,13 @@ test('device print preference is opt-in and Android setup exposes a test receipt
   assert.match(bytes,/TEST-ONLY/);assert.match(bytes,/no\s+transaction/);
 });
 
+test('Android RawBT setup explains the free-version notice and keeps browser fallback', async () => {
+  const h = await harness();
+  h.api.openPurchaseReceipt('buy-test');
+  assert.match(h.appended[0].innerHTML, /free RawBT version may add its own notice/i);
+  assert.match(h.appended[0].innerHTML, /Browser print/);
+});
+
 
 test('both receipt paths use the signed-in staff name and provide a handwritten signature line',async()=>{
   const h=await harness();
