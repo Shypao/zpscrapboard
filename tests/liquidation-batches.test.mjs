@@ -1819,6 +1819,18 @@ test('jewelry pooled inventory uses pieces instead of grams in the edit view', a
   assert.doesNotMatch(html, /Current weight \(g\)/);
 });
 
+test('scrapboard pooled inventory uses Scrapboard as its item type', async () => {
+  const api = await loadInventoryApi();
+  const state = customPoolFixture('Scrapboard', 'A2');
+  state.stock.forEach(item => { item.itemType = 'Jewelry'; });
+  api.setState(state);
+
+  const html = api.openPoolEdit('POOL-CUSTOM');
+
+  assert.match(html, /<select id="edit_pool_type" disabled><option selected>Scrapboard<\/option><\/select>/);
+  assert.doesNotMatch(html, /<option[^>]*>Jewelry<\/option>/);
+});
+
 test('weight dropdown separates karats and quantity breakdown filters to the selected karat', async () => {
   const api = await loadInventoryApi();
   const state = customPoolFixture('Gold', '24K');
