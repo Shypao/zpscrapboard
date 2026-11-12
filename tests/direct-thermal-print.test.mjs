@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import test from 'node:test';
 import vm from 'node:vm';
 
-async function harness({android=true,method='browser',saved='browser'}={}){
+async function harness({android=true,method='browser',saved='browser',bridge=false}={}){
   const source=await readFile(new URL('../public/app.js',import.meta.url),'utf8');
   const code=source.slice(source.indexOf('function receiptWeightNumber('),source.indexOf('/* ============================= INVENTORY'));
   const values={receipt_paper_size:'58',receipt_print_method:method};
@@ -15,7 +15,7 @@ async function harness({android=true,method='browser',saved='browser'}={}){
     btoa:value=>Buffer.from(value,'binary').toString('base64'),
     localStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)},
     sessionStorage:{setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)},
-    window:{location:{href:''},open:(...args)=>{calls.push(args);return {};}},
+    window:{location:{href:''},AndroidBluetoothBridge:bridge?{printEscPos:value=>calls.push(['bluetooth',value])}:undefined,open:(...args)=>{calls.push(args);return {};}},
     document:{getElementById:()=>null,body:{classList:{remove(){}},appendChild:node=>appended.push(node)},createElement:()=>({addEventListener(){}})},
     db:{stock:items},val:id=>values[id]||'',roundMoney:value=>Math.round(value*100)/100,fmtDate:value=>value,todayStr:()=> '2026-11-07',
     gradeLabel:(_metal,karat)=>karat,esc:value=>String(value),toast:value=>calls.push(value),
@@ -47,6 +47,15 @@ test('Android direct mode launches a raw base64 intent without a browser print p
   assert.equal(bytes,h.api.purchaseReceiptEscPos(h.items,58));
   assert.equal(h.calls.filter(Array.isArray).length,0);
   assert.match(h.calls[0],/Sent to RawBT/);assert.doesNotMatch(h.calls[0],/successfully printed/i);
+});
+
+test('native Android bridge sends receipt bytes directly without launching RawBT', async () => {
+  const h = await harness({method:'bluetooth', bridge:true});
+  h.api.printPurchaseReceipt('buy-test');
+  assert.equal(h.calls[0][0], 'bluetooth');
+  assert.equal(h.context.window.location.href, '');
+  const bytes = Buffer.from(h.calls[0][1], 'base64').toString('binary');
+  assert.equal(bytes, h.api.purchaseReceiptEscPos(h.items, 58));
 });
 
 test('manual browser fallback never launches the direct bridge and desktop ignores saved Android mode',async()=>{
