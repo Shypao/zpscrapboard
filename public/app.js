@@ -3655,8 +3655,11 @@ function receiptPrintMethod() {
         const saved = localStorage.getItem('thermalReceiptPrintMethod');
         if (saved === 'bluetooth' && nativeBluetoothBridgeAvailable())
             return 'bluetooth';
+        // Keep Browser print as the safe default even when an older session saved
+        // RawBT. RawBT remains available only when the user selects it explicitly
+        // in the current receipt dialog.
         if (saved === 'rawbt')
-            return 'rawbt';
+            return 'browser';
         return nativeBluetoothBridgeAvailable() ? 'bluetooth' : 'browser';
     }
     catch {

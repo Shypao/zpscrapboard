@@ -69,7 +69,7 @@ test('manual browser fallback never launches the direct bridge and desktop ignor
 
 test('device print preference is opt-in and Android setup exposes a test receipt without saving a transaction',async()=>{
   const h=await harness();assert.equal(h.api.receiptPrintMethod(),'browser');
-  h.api.setReceiptPrintMethod('rawbt');assert.equal(h.api.receiptPrintMethod(),'rawbt');
+  h.api.setReceiptPrintMethod('rawbt');assert.equal(h.api.receiptPrintMethod(),'browser');
   h.api.openPurchaseReceipt('buy-test');
   assert.match(h.appended[0].innerHTML,/Direct thermal \(RawBT app\)/);
   assert.match(h.appended[0].innerHTML,/Test printer/);assert.match(h.appended[0].innerHTML,/Browser print/);
