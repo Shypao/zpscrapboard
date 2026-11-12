@@ -1276,7 +1276,7 @@ test('inventory displays a pool as one available row with combined weight and co
   assert.match(editModal, /id="edit_pool_weight"/);
   assert.match(editModal, /id="edit_pool_cost"/);
   assert.match(editModal, /id="edit_pool_remarks"/);
-  assert.match(editModal, /Pool items/);
+  assert.match(editModal, /Pool records/);
   assert.match(editModal, /data-pool-return-item-id="pool-a"/);
   assert.match(editModal, /data-pool-return-item-id="pool-b"/);
   assert.match(editModal, /Return selected to Inventory/);
@@ -1799,7 +1799,10 @@ test('same-purity pool counts as one liquidation item and preserves source alloc
   assert.match(breakdown, /8\.00 g/);
   const html = api.openPoolEdit('POOL-CUSTOM');
   assert.match(html, /<h3>Pool item<\/h3>/);
-  assert.match(html, /<details><summary>Choose items to return · Original records/);
+  assert.match(html, /<span>Records<\/span><strong>1<\/strong>/);
+  assert.match(html, /Current weight \(g\)/);
+  assert.doesNotMatch(html, /<span>Items<\/span><strong>1<\/strong>/);
+  assert.match(html, /<details><summary>Choose records to return · Original records/);
 });
 
 test('weight dropdown separates karats and quantity breakdown filters to the selected karat', async () => {
