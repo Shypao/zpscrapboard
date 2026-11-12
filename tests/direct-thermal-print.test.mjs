@@ -59,22 +59,24 @@ test('native Android bridge sends receipt bytes directly without launching RawBT
 });
 
 test('manual browser fallback never launches the direct bridge and desktop ignores saved Android mode',async()=>{
-  for(const android of [true,false]){
-    const h=await harness({android,method:'rawbt',saved:'rawbt'});
-    h.api.printPurchaseReceipt('buy-test',android?'browser':null);
-    assert.deepEqual(Array.from(h.calls[0]),['/receipt-print.html','_blank']);
-    assert.equal(h.context.window.location.href,'');
-  }
+  const android=await harness({android:true,method:'rawbt',saved:'rawbt'});
+  android.api.printPurchaseReceipt('buy-test','browser');
+  assert.deepEqual(Array.from(android.calls[0]),['/receipt-print.html','_blank']);
+  assert.equal(android.context.window.location.href,'');
+  const desktop=await harness({android:false,method:'rawbt',saved:'rawbt'});
+  desktop.api.printPurchaseReceipt('buy-test');
+  assert.deepEqual(Array.from(desktop.calls[0]),['/receipt-print.html','_blank']);
+  assert.equal(desktop.context.window.location.href,'');
 });
 
-test('device print preference is opt-in and Android setup exposes a test receipt without saving a transaction',async()=>{
-  const h=await harness();assert.equal(h.api.receiptPrintMethod(),'browser');
-  h.api.setReceiptPrintMethod('rawbt');assert.equal(h.api.receiptPrintMethod(),'browser');
+test('device print preference follows the selected Android method and exposes a test receipt without saving a transaction',async()=>{
+  const h=await harness({method:'rawbt',saved:'rawbt'});assert.equal(h.api.receiptPrintMethod(),'rawbt');
+  h.api.setReceiptPrintMethod('rawbt');assert.equal(h.api.receiptPrintMethod(),'rawbt');
   h.api.openPurchaseReceipt('buy-test');
   assert.match(h.appended[0].innerHTML,/Direct thermal \(RawBT ESC\/POS\)/);
   assert.match(h.appended[0].innerHTML,/Test printer/);assert.match(h.appended[0].innerHTML,/Browser print/);
   const before=JSON.stringify(h.items);h.api.printThermalTestReceipt();assert.equal(JSON.stringify(h.items),before);
-  assert.ok(h.calls.some(call=>Array.isArray(call)&&call[0]==='/receipt-print.html'));
+  assert.match(h.context.window.location.href,/^intent:base64,/);
 });
 
 test('Android receipt setup defaults to browser print while exposing manual RawBT ESC/POS', async () => {
