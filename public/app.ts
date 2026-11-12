@@ -2823,7 +2823,16 @@ function sendDirectThermalReceipt(items,paperWidth){
 }
 function printThermalTestReceipt(){
   const width=Number(val('receipt_paper_size'))===80?80:58;
+  if(val('receipt_print_method')==='rawbt') return sendRawBtThermalReceipt([{id:'TEST-ONLY',date:todayStr(),customerName:'Printer test - no transaction',metal:'Gold',karat:'24K',itemType:'TEST ONLY',netWeight:1,rate:1000,payout:1000,paymentMethod:'TEST ONLY'}],width);
   sendDirectThermalReceipt([{id:'TEST-ONLY',date:todayStr(),customerName:'Printer test - no transaction',metal:'Gold',karat:'24K',itemType:'TEST ONLY',netWeight:1,rate:1000,payout:1000,paymentMethod:'TEST ONLY'}],width);
+}
+function sendRawBtThermalReceipt(items,paperWidth){
+  if(!androidThermalPrinting()){openThermalReceiptPrintPage(items,paperWidth);return;}
+  try{
+    const data=btoa(purchaseReceiptEscPos(items,paperWidth));
+    window.location.href='intent:base64,'+data+'#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;';
+    toast('Sent ESC/POS receipt to RawBT. Any RawBT license notice is added by RawBT itself.');
+  }catch{toast('Could not open RawBT. Use Browser print or Bluetooth bridge.');}
 }
 
 function openPurchaseReceipt(batchId){
@@ -2836,7 +2845,7 @@ function openPurchaseReceipt(batchId){
     <div class="summary-modal-head"><div><div class="eyebrow">Thermal receipt preview</div><h2 id="receipt_preview_title">Buying receipt</h2></div><button class="modal-close" onclick="closePurchaseReceipt()" aria-label="Close">×</button></div>
     <div class="receipt-preview-stage"><div class="thermal-receipt ${savedPaperWidth==='80'?'paper-80':''}" id="receipt_preview_paper">${purchaseReceiptMarkup(items)}</div></div>
     <div class="receipt-preview-controls"><div class="field"><label for="receipt_paper_size">Thermal paper width</label><select id="receipt_paper_size" onchange="setReceiptPaperSize(this.value)"><option value="58" ${savedPaperWidth==='58'?'selected':''}>58 mm</option><option value="80" ${savedPaperWidth==='80'?'selected':''}>80 mm</option></select><span class="form-note">Choose the same paper width in the printer settings.</span></div>
-    ${androidThermalPrinting()?`<div class="field"><label for="receipt_print_method">Print method on this device</label><select id="receipt_print_method" onchange="setReceiptPrintMethod(this.value)">${nativeBluetoothBridgeAvailable()?`<option value="bluetooth" ${receiptPrintMethod()==='bluetooth'?'selected':''}>Direct Bluetooth bridge</option>`:''}<option value="browser" ${receiptPrintMethod()==='browser'?'selected':''}>Browser print</option></select></div><div id="receipt_direct_help" class="form-note ${receiptPrintMethod()==='browser'?'is-hidden':''}"><p>${nativeBluetoothBridgeAvailable()&&receiptPrintMethod()==='bluetooth'?'The Android bridge sends ESC/POS directly to a paired VOZY or PrinterX Bluetooth printer. It does not use RawBT.':'Browser print opens the same clean receipt print page used by the Gold setup.'}</p><p>${nativeBluetoothBridgeAvailable()&&receiptPrintMethod()==='bluetooth'?'Pair the printer in Android Bluetooth settings first. The bridge will ask you to choose the paired printer when you print.':'Use Chrome print settings: choose the matching 58/80 mm paper, Margins: None, Scale: 100%, and turn Headers and footers OFF.'}</p><p><button type="button" class="btn secondary small" onclick="printThermalTestReceipt()">Test printer</button></p></div>`:''}
+    ${androidThermalPrinting()?`<div class="field"><label for="receipt_print_method">Print method on this device</label><select id="receipt_print_method" onchange="setReceiptPrintMethod(this.value)">${nativeBluetoothBridgeAvailable()?`<option value="bluetooth" ${receiptPrintMethod()==='bluetooth'?'selected':''}>Direct Bluetooth bridge</option>`:''}<option value="browser" ${receiptPrintMethod()==='browser'?'selected':''}>Browser print</option><option value="rawbt">Direct thermal (RawBT ESC/POS)</option></select></div><div id="receipt_direct_help" class="form-note ${receiptPrintMethod()==='browser'?'is-hidden':''}"><p>${nativeBluetoothBridgeAvailable()&&receiptPrintMethod()==='bluetooth'?'The Android bridge sends ESC/POS directly to a paired VOZY or PrinterX Bluetooth printer. It does not use RawBT.':receiptPrintMethod()==='rawbt'?'Raw ESC/POS text is sent directly to RawBT, matching the Gold setup.':'Browser print opens the same clean receipt print page used by the Gold setup.'}</p><p>${nativeBluetoothBridgeAvailable()&&receiptPrintMethod()==='bluetooth'?'Pair the printer in Android Bluetooth settings first. The bridge will ask you to choose the paired printer when you print.':receiptPrintMethod()==='rawbt'?'RawBT Free may append its own license notice; use Browser print or the Bluetooth bridge for a clean receipt.':'Use Chrome print settings: choose the matching 58/80 mm paper, Margins: None, Scale: 100%, and turn Headers and footers OFF.'}</p><p><button type="button" class="btn secondary small" onclick="printThermalTestReceipt()">Test printer</button></p></div>`:''}
     <div class="form-actions"><button class="btn secondary" onclick="closePurchaseReceipt()">Close</button>${androidThermalPrinting()?`<button class="btn secondary" onclick="printPurchaseReceipt('${batchId}','browser')">Browser print</button>`:''}<button class="btn" onclick="printPurchaseReceipt('${batchId}')">Print receipt</button></div></div>
   </div>`;
   modal.addEventListener('click',event=>{if(event.target===modal)closePurchaseReceipt();});
@@ -2891,6 +2900,7 @@ function printPurchaseReceipt(batchId,method=null){
   const paperWidth=Number(val('receipt_paper_size'))===80?80:58;
   const selectedMethod=method||val('receipt_print_method')||receiptPrintMethod();
   if(selectedMethod==='bluetooth'&&androidThermalPrinting())return sendDirectThermalReceipt(items,paperWidth);
+  if(selectedMethod==='rawbt'&&androidThermalPrinting())return sendRawBtThermalReceipt(items,paperWidth);
   return openThermalReceiptPrintPage(items,paperWidth);
 }
 
