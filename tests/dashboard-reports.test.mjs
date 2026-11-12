@@ -262,7 +262,7 @@ test('weight-based scrapboard inventory labels record counts separately from gra
 
   const html = api.renderInventory();
 
-  assert.match(html, /<th class="num-head">Records<\/th><th class="num-head">Total weight<\/th>/);
+  assert.match(html, /<th class="num-head">Records<\/th><th class="num-head">Quantity<\/th>/);
   assert.match(html, /Current records/);
   assert.doesNotMatch(html, /<th class="num-head">Items<\/th>/);
 });

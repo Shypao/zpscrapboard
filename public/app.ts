@@ -993,6 +993,15 @@ function todayPurchaseMetalSummary(purchases,metal){
     payout:items.reduce((sum,item)=>sum+Number(item.payout||0),0)
   };
 }
+function inventoryQuantityUnit(item){
+  if(item?.itemType==='Jewelry') return 'pc';
+  if(item?.metal==='Scrapboard') return scrapboardItems(true).find(entry=>entry.key===item.karat)?.unit||'kg';
+  return 'kg';
+}
+function inventoryQuantityText(value,unit){
+  const quantity=unit==='kg'?Number(value||0)/1000:Number(value||0);
+  return `${quantity.toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2})} ${unit}`;
+}
 function dailyMetalPurityBreakdownMarkup(items,metal){
   const totals=purchaseTotalsByPurity(items);
   return `<section class="daily-metal-purity-breakdown"><h3>${esc(metal)} totals by classification</h3>
@@ -4014,14 +4023,15 @@ function renderInventory(){
   const breakdownSource=currentStock.filter(item=>invFilter.metal==='All'||item.metal===invFilter.metal);
   const breakdownMap=new Map();
   breakdownSource.forEach(item=>{
-    const key=`${item.metal}|${item.karat}`,entry=breakdownMap.get(key)||{metal:item.metal,karat:item.karat,count:0,weight:0,cost:0};
+    const key=`${item.metal}|${item.karat}`,entry=breakdownMap.get(key)||{metal:item.metal,karat:item.karat,unit:inventoryQuantityUnit(item),count:0,weight:0,cost:0};
+    if(entry.unit!==inventoryQuantityUnit(item)) entry.unit='kg';
     entry.count+=1; entry.weight+=Number(item.currentWeight); entry.cost+=Number(item.cost); breakdownMap.set(key,entry);
   });
   const metalOrder=['Scrapboard','Gold','Silver','Platinum'];
   const breakdown=Array.from(breakdownMap.values()).sort((a,b)=>(metalOrder.indexOf(a.metal)-metalOrder.indexOf(b.metal))||(gradeSortIndex(a.metal,a.karat)-gradeSortIndex(b.metal,b.karat))||String(a.karat).localeCompare(String(b.karat)));
   const breakdownRows=invFilter.metal==='All'
-    ? metalOrder.flatMap(metal=>{const entries=breakdown.filter(entry=>entry.metal===metal);return entries.length?[`<tr class="inventory-breakdown-metal-header inventory-breakdown-metal-header--${metal.toLowerCase()}"><th colspan="5">${metal}</th></tr>`,...entries.map(entry=>`<tr><td><span class="metal-tag ${entry.metal.toLowerCase()}">${entry.metal}</span></td><td>${esc(gradeLabel(entry.metal,entry.karat))}</td><td class="num">${entry.count}</td><td class="num">${fmtWeight(entry.weight)}</td><td class="num">${fmtMoney(entry.cost)}</td></tr>`)] : []}).join('')
-    : breakdown.map(entry=>`<tr><td><span class="metal-tag ${entry.metal.toLowerCase()}">${entry.metal}</span></td><td>${esc(gradeLabel(entry.metal,entry.karat))}</td><td class="num">${entry.count}</td><td class="num">${fmtWeight(entry.weight)}</td><td class="num">${fmtMoney(entry.cost)}</td></tr>`).join('');
+    ? metalOrder.flatMap(metal=>{const entries=breakdown.filter(entry=>entry.metal===metal);return entries.length?[`<tr class="inventory-breakdown-metal-header inventory-breakdown-metal-header--${metal.toLowerCase()}"><th colspan="5">${metal}</th></tr>`,...entries.map(entry=>`<tr><td><span class="metal-tag ${entry.metal.toLowerCase()}">${entry.metal}</span></td><td>${esc(gradeLabel(entry.metal,entry.karat))}</td><td class="num">${entry.count}</td><td class="num">${inventoryQuantityText(entry.weight,entry.unit)}</td><td class="num">${fmtMoney(entry.cost)}</td></tr>`)] : []}).join('')
+    : breakdown.map(entry=>`<tr><td><span class="metal-tag ${entry.metal.toLowerCase()}">${entry.metal}</span></td><td>${esc(gradeLabel(entry.metal,entry.karat))}</td><td class="num">${entry.count}</td><td class="num">${inventoryQuantityText(entry.weight,entry.unit)}</td><td class="num">${fmtMoney(entry.cost)}</td></tr>`).join('');
   const breakdownWeight=breakdownSource.reduce((sum,item)=>sum+Number(item.currentWeight),0);
   const breakdownCost=breakdownSource.reduce((sum,item)=>sum+Number(item.cost),0);
   const selectedGradeCounts=new Map();
@@ -4033,13 +4043,13 @@ function renderInventory(){
     <div class="inventory-metal-tabs"><strong>View stock</strong>${['All','Scrapboard'].map(metal=>`<button class="${invFilter.metal===metal?'active':''}" onclick="selectInventoryMetalCategory('${metal}')">${metal==='All'?'All scrapboard':metal}</button>`).join('')}</div>
     <div class="stat-row inventory-overview-stats">
       <div class="stat"><div class="label">Current records</div><div class="value">${breakdownSource.length}</div><div class="sub">weight-based records across all dates</div></div>
-      <div class="stat"><div class="label">Total weight</div><div class="value">${fmtWeight(breakdownWeight)}</div><div class="sub">remaining current stock</div></div>
+      <div class="stat"><div class="label">Total quantity</div><div class="value">${breakdown.map(entry=>inventoryQuantityText(entry.weight,entry.unit)).join(' · ')||'0.00 kg'}</div><div class="sub">remaining current stock</div></div>
       <div class="stat"><div class="label">Total inventory cost</div><div class="value">${fmtMoney(breakdownCost)}</div><div class="sub">combined carrying cost</div></div>
       <div class="stat"><div class="label">Classification groups</div><div class="value">${breakdown.length}</div><div class="sub">shown in the breakdown below</div></div>
     </div>
     <div class="inventory-breakdown-card">
       <div class="inventory-breakdown-intro"><h2 class="block-title inventory-breakdown-heading">${invFilter.metal==='All'?'All current stock by classification':'Scrapboard inventory by classification'}</h2><p class="form-note inventory-breakdown-caption">Totals below combine every active buying date.</p></div>
-      ${breakdown.length?`<div class="table-wrap inventory-breakdown"><table><thead><tr><th>Material</th><th>Classification</th><th class="num-head">Records</th><th class="num-head">Total weight</th><th class="num-head">Total cost</th></tr></thead><tbody>${breakdownRows}</tbody></table></div><div class="inventory-breakdown-total"><span>${invFilter.metal==='All'?'All current stock':'Scrapboard total'} · ${breakdownSource.length} record${breakdownSource.length===1?'':'s'} · ${fmtWeight(breakdownWeight)}</span><strong>${fmtMoney(breakdownCost)}</strong></div>`
+      ${breakdown.length?`<div class="table-wrap inventory-breakdown"><table><thead><tr><th>Material</th><th>Classification</th><th class="num-head">Records</th><th class="num-head">Quantity</th><th class="num-head">Total cost</th></tr></thead><tbody>${breakdownRows}</tbody></table></div><div class="inventory-breakdown-total"><span>${invFilter.metal==='All'?'All current stock':'Scrapboard total'} · ${breakdownSource.length} record${breakdownSource.length===1?'':'s'} · Quantity ${fmtWeight(breakdownWeight)}</span><strong>${fmtMoney(breakdownCost)}</strong></div>`
         : `<div class="empty-note">No active ${invFilter.metal==='All'?'inventory':esc(invFilter.metal)+' inventory'} remains.</div>`}
     </div>
     <p class="form-note inventory-history-note">Items prepared for sale or release are shown in Sales &amp; Releases. Released and sold items remain in reports and transaction history.</p>
@@ -4091,10 +4101,11 @@ function openInventoryPoolEdit(id){
   const customSelected=composition.metal!=='Mixed'&&customPurityFromKey(composition.karat)!==null&&!(GRADES[composition.metal]||[]).includes(composition.karat);
   const itemType=sharedPoolItemValue(snapshot.items,'itemType')||'Mixed';
   const quantityIsPieces=itemType==='Jewelry';
-  const quantityLabel=quantityIsPieces?'Quantity (pcs)':'Weight (g)';
-  const currentQuantityLabel=quantityIsPieces?'Current quantity (pcs)':'Current weight (g)';
-  const remainingQuantityLabel=quantityIsPieces?'Remaining quantity (pcs)':'Remaining weight (g)';
-  const quantityValue=value=>quantityIsPieces?Number(value||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2}):fmtWeight(value);
+  const quantityUnit=quantityIsPieces?'pc':'kg';
+  const quantityLabel=`Quantity (${quantityUnit})`;
+  const currentQuantityLabel=`Current quantity (${quantityUnit})`;
+  const remainingQuantityLabel=`Remaining quantity (${quantityUnit})`;
+  const quantityValue=value=>Number(value||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2});
   openAdminEditModal('Edit pooled inventory',`<div class="form-grid">
     <div class="field"><label>Date</label><input id="edit_pool_date" type="date" value="${esc(date)}"></div>
     <div class="field"><label>Classification</label><select id="edit_pool_status">${['Available','On Hold'].map(status=>`<option ${poolInventoryClassification(pool,snapshot)===status?'selected':''}>${status}</option>`).join('')}</select></div>

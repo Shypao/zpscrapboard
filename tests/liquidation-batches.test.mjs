@@ -1800,7 +1800,7 @@ test('same-purity pool counts as one liquidation item and preserves source alloc
   const html = api.openPoolEdit('POOL-CUSTOM');
   assert.match(html, /<h3>Pool item<\/h3>/);
   assert.match(html, /<span>Records<\/span><strong>1<\/strong>/);
-  assert.match(html, /Current weight \(g\)/);
+  assert.match(html, /Current quantity \(kg\)/);
   assert.doesNotMatch(html, /<span>Items<\/span><strong>1<\/strong>/);
   assert.match(html, /<details><summary>Choose records to return · Original records/);
 });
@@ -1813,9 +1813,9 @@ test('jewelry pooled inventory uses pieces instead of grams in the edit view', a
 
   const html = api.openPoolEdit('POOL-CUSTOM');
 
-  assert.match(html, /Current quantity \(pcs\)/);
-  assert.match(html, /<span>Quantity \(pcs\)<\/span><strong>10\.00<\/strong>/);
-  assert.match(html, /Remaining quantity \(pcs\)/);
+  assert.match(html, /Current quantity \(pc\)/);
+  assert.match(html, /<span>Quantity \(pc\)<\/span><strong>10\.00<\/strong>/);
+  assert.match(html, /Remaining quantity \(pc\)/);
   assert.doesNotMatch(html, /Current weight \(g\)/);
 });
 
