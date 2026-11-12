@@ -1805,6 +1805,20 @@ test('same-purity pool counts as one liquidation item and preserves source alloc
   assert.match(html, /<details><summary>Choose records to return · Original records/);
 });
 
+test('jewelry pooled inventory uses pieces instead of grams in the edit view', async () => {
+  const api = await loadInventoryApi();
+  const state = customPoolFixture('Gold', '24K');
+  state.stock.forEach(item => { item.itemType = 'Jewelry'; });
+  api.setState(state);
+
+  const html = api.openPoolEdit('POOL-CUSTOM');
+
+  assert.match(html, /Current quantity \(pcs\)/);
+  assert.match(html, /<span>Quantity \(pcs\)<\/span><strong>10\.00<\/strong>/);
+  assert.match(html, /Remaining quantity \(pcs\)/);
+  assert.doesNotMatch(html, /Current weight \(g\)/);
+});
+
 test('weight dropdown separates karats and quantity breakdown filters to the selected karat', async () => {
   const api = await loadInventoryApi();
   const state = customPoolFixture('Gold', '24K');
