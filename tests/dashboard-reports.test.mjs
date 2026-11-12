@@ -253,6 +253,20 @@ test('inventory breakdown groups its heading, table, and total into one card', a
   assert.match(html, /inventory-breakdown-card[\s\S]*inventory-breakdown[\s\S]*inventory-breakdown-total/);
 });
 
+test('weight-based scrapboard inventory labels record counts separately from grams', async () => {
+  const api = await loadDashboardReports();
+  api.setState(testState([
+    { id: 'scrapboard-stock', date: '2026-09-10', metal: 'Scrapboard', karat: 'A2', itemType: 'IC Chips', status: 'Available', currentWeight: 5, cost: 1000 }
+  ]));
+  api.setInventoryView('All', 'Scrapboard');
+
+  const html = api.renderInventory();
+
+  assert.match(html, /<th class="num-head">Records<\/th><th class="num-head">Total weight<\/th>/);
+  assert.match(html, /Current records/);
+  assert.doesNotMatch(html, /<th class="num-head">Items<\/th>/);
+});
+
 test('stock records content uses the full inventory width', async () => {
   const indexPath = new URL('../public/index.html', import.meta.url);
   const source = await readFile(indexPath, 'utf8');

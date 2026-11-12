@@ -799,7 +799,7 @@ test('For Liquidation records are excluded from Current Inventory', async () => 
   assert.match(html, /On Hand Seller/);
   assert.doesNotMatch(html, /Transit Seller A/);
   assert.doesNotMatch(html, /Transit Seller B/);
-  assert.match(html, />1<\/div><div class="sub">active records across all dates/);
+  assert.match(html, />1<\/div><div class="sub">weight-based records across all dates/);
 });
 
 test('open refining batch records are excluded from Current Inventory', async () => {
@@ -812,7 +812,7 @@ test('open refining batch records are excluded from Current Inventory', async ()
 
   const html = api.renderInventory();
 
-  assert.match(html, /Current items<\/div><div class="value">0<\/div>/);
+  assert.match(html, /Current records<\/div><div class="value">0<\/div>/);
   assert.doesNotMatch(html, /Refining Seller/);
 });
 
