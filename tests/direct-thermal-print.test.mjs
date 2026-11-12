@@ -39,14 +39,10 @@ test('direct ESC/POS receipt preserves totals, wraps within 58/80mm columns, and
   }
 });
 
-test('Android direct mode launches a raw base64 intent without a browser print page or success claim',async()=>{
+test('Android receipt printing uses the browser path instead of launching RawBT',async()=>{
   const h=await harness({method:'rawbt'});h.api.printPurchaseReceipt('buy-test');
-  const uri=h.context.window.location.href;
-  assert.match(uri,/^intent:base64,[A-Za-z0-9+/=]+#Intent;scheme=rawbt;package=ru\.a402d\.rawbtprinter;end;$/);
-  const bytes=Buffer.from(uri.split(',')[1].split('#')[0],'base64').toString('binary');
-  assert.equal(bytes,h.api.purchaseReceiptEscPos(h.items,58));
-  assert.equal(h.calls.filter(Array.isArray).length,0);
-  assert.match(h.calls[0],/Sent to RawBT/);assert.doesNotMatch(h.calls[0],/successfully printed/i);
+  assert.deepEqual(Array.from(h.calls[0]),['/receipt-print.html','_blank']);
+  assert.equal(h.context.window.location.href,'');
 });
 
 test('native Android bridge sends receipt bytes directly without launching RawBT', async () => {
@@ -71,17 +67,17 @@ test('device print preference is opt-in and Android setup exposes a test receipt
   const h=await harness();assert.equal(h.api.receiptPrintMethod(),'browser');
   h.api.setReceiptPrintMethod('rawbt');assert.equal(h.api.receiptPrintMethod(),'browser');
   h.api.openPurchaseReceipt('buy-test');
-  assert.match(h.appended[0].innerHTML,/Direct thermal \(RawBT app\)/);
+  assert.doesNotMatch(h.appended[0].innerHTML,/RawBT app/);
   assert.match(h.appended[0].innerHTML,/Test printer/);assert.match(h.appended[0].innerHTML,/Browser print/);
   const before=JSON.stringify(h.items);h.api.printThermalTestReceipt();assert.equal(JSON.stringify(h.items),before);
-  const bytes=Buffer.from(h.context.window.location.href.split(',')[1].split('#')[0],'base64').toString('binary');
-  assert.match(bytes,/TEST-ONLY/);assert.match(bytes,/no\s+transaction/);
+  assert.ok(h.calls.some(call=>Array.isArray(call)&&call[0]==='/receipt-print.html'));
 });
 
-test('Android RawBT setup explains the free-version notice and keeps browser fallback', async () => {
+test('Android receipt setup defaults to browser print without RawBT', async () => {
   const h = await harness();
   h.api.openPurchaseReceipt('buy-test');
-  assert.match(h.appended[0].innerHTML, /free RawBT version may add its own notice/i);
+  assert.doesNotMatch(h.appended[0].innerHTML, /free RawBT version/i);
+  assert.doesNotMatch(h.appended[0].innerHTML, /Direct thermal \(RawBT app\)/i);
   assert.match(h.appended[0].innerHTML, /Browser print/);
 });
 
