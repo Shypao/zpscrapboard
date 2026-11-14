@@ -1003,6 +1003,11 @@ function inventoryQuantityText(value,unit){
   const quantity=unit==='kg'?Number(value||0)/1000:Number(value||0);
   return `${quantity.toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2})} ${unit}`;
 }
+function inventoryQuantityTotalsText(entries,fallback='0.00 kg'){
+  const totals=new Map();
+  entries.forEach(entry=>totals.set(entry.unit,(totals.get(entry.unit)||0)+Number(entry.weight||0)));
+  return ['pc','kg'].filter(unit=>totals.has(unit)).map(unit=>inventoryQuantityText(totals.get(unit),unit)).join(' · ')||fallback;
+}
 function dailyMetalPurityBreakdownMarkup(items,metal){
   const totals=purchaseTotalsByPurity(items);
   return `<section class="daily-metal-purity-breakdown"><h3>${esc(metal)} totals by classification</h3>
@@ -4056,13 +4061,13 @@ function renderInventory(){
     <div class="inventory-metal-tabs"><strong>View stock</strong>${['All','Scrapboard'].map(metal=>`<button class="${invFilter.metal===metal?'active':''}" onclick="selectInventoryMetalCategory('${metal}')">${metal==='All'?'All scrapboard':metal}</button>`).join('')}</div>
     <div class="stat-row inventory-overview-stats">
       <div class="stat"><div class="label">Current records</div><div class="value">${breakdownSource.length}</div><div class="sub">weight-based records across all dates</div></div>
-      <div class="stat"><div class="label">Total quantity</div><div class="value">${breakdown.map(entry=>inventoryQuantityText(entry.weight,entry.unit)).join(' · ')||'0.00 kg'}</div><div class="sub">remaining current stock</div></div>
+      <div class="stat inventory-total-quantity"><div class="label">Total quantity</div><div class="value">${inventoryQuantityTotalsText(breakdown)}</div><div class="sub">remaining current stock</div></div>
       <div class="stat"><div class="label">Total inventory cost</div><div class="value">${fmtMoney(breakdownCost)}</div><div class="sub">combined carrying cost</div></div>
       <div class="stat"><div class="label">Classification groups</div><div class="value">${breakdown.length}</div><div class="sub">shown in the breakdown below</div></div>
     </div>
     <div class="inventory-breakdown-card">
       <div class="inventory-breakdown-intro"><h2 class="block-title inventory-breakdown-heading">${invFilter.metal==='All'?'All current stock by classification':'Scrapboard inventory by classification'}</h2><p class="form-note inventory-breakdown-caption">Totals below combine every active buying date.</p></div>
-      ${breakdown.length?`<div class="table-wrap inventory-breakdown"><table><thead><tr><th>Material</th><th>Classification</th><th class="num-head">Records</th><th class="num-head">Quantity</th><th class="num-head">Total cost</th></tr></thead><tbody>${breakdownRows}</tbody></table></div><div class="inventory-breakdown-total"><span>${invFilter.metal==='All'?'All current stock':'Scrapboard total'} · ${breakdownSource.length} record${breakdownSource.length===1?'':'s'} · ${breakdown.map(entry=>inventoryQuantityText(entry.weight,entry.unit)).join(' · ')}</span><strong>${fmtMoney(breakdownCost)}</strong></div>`
+      ${breakdown.length?`<div class="table-wrap inventory-breakdown"><table><thead><tr><th>Material</th><th>Classification</th><th class="num-head">Records</th><th class="num-head">Quantity</th><th class="num-head">Total cost</th></tr></thead><tbody>${breakdownRows}</tbody></table></div><div class="inventory-breakdown-total"><span>${invFilter.metal==='All'?'All current stock':'Scrapboard total'} · ${breakdownSource.length} record${breakdownSource.length===1?'':'s'} · ${inventoryQuantityTotalsText(breakdown)}</span><strong>${fmtMoney(breakdownCost)}</strong></div>`
         : `<div class="empty-note">No active ${invFilter.metal==='All'?'inventory':esc(invFilter.metal)+' inventory'} remains.</div>`}
     </div>
     <p class="form-note inventory-history-note">Items prepared for sale or release are shown in Sales &amp; Releases. Released and sold items remain in reports and transaction history.</p>
