@@ -58,6 +58,14 @@ test('native Android bridge sends receipt bytes directly without launching RawBT
   assert.equal(bytes, h.api.purchaseReceiptEscPos(h.items, 58));
 });
 
+test('installed bridge takes priority over a stale RawBT preference', async () => {
+  const h = await harness({method:'', saved:'rawbt', bridge:true});
+  assert.equal(h.api.receiptPrintMethod(), 'bluetooth');
+  h.api.printPurchaseReceipt('buy-test');
+  assert.equal(h.calls[0][0], 'bluetooth');
+  assert.equal(h.context.window.location.href, '');
+});
+
 test('manual browser fallback never launches the direct bridge and desktop ignores saved Android mode',async()=>{
   const android=await harness({android:true,method:'rawbt',saved:'rawbt'});
   android.api.printPurchaseReceipt('buy-test','browser');

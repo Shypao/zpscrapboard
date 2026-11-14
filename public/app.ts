@@ -2749,6 +2749,9 @@ function receiptPrintMethod(){
   if(!androidThermalPrinting())return 'browser';
   try{
     const saved=localStorage.getItem('thermalReceiptPrintMethod');
+    // Prefer the native companion bridge over stale RawBT/browser preferences.
+    // This keeps Print receipt inside the bridge app and avoids another tab.
+    if(nativeBluetoothBridgeAvailable())return 'bluetooth';
     if(saved==='bluetooth'&&nativeBluetoothBridgeAvailable())return 'bluetooth';
     // Match Gold: once RawBT is selected on Android, keep using its direct
     // ESC/POS path until the user changes the print method.
