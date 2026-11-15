@@ -589,7 +589,7 @@ test('search selection updates the hidden classification before draft capture an
   const api = await loadCustomItemApi();
   api.setAdmin();
   const selected = api.selectBuyingItemWithDom('A6', 'NC512');
-  assert.deepEqual({ ...selected }, { selected: 'A6', draft: 'A6', rate: '1500', unit: 'kg' });
+  assert.deepEqual({ ...selected }, { selected: 'A6', draft: 'A6', rate: '1500', unit: 'g' });
 });
 
 test('new custom item renders as a Daily Rates card in its category', async () => {

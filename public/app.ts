@@ -3384,7 +3384,7 @@ function inventoryPoolingSelection(){
 function automaticScrapboardPoolKey(item){
   if(String(item?.metal||'').toLowerCase()!=='scrapboard') return '';
   const categoryKey=normalizedCatalogName(item.scrapboardCategoryKey||scrapboardItemCategoryKey(item.karat));
-  const classification=String(item.karat||'').trim();
+  const classification=`${String(item.date||'').trim()}|${String(item.karat||'').trim()}`;
   return categoryKey&&classification?`${categoryKey.toLowerCase()}\u0000${classification.toLowerCase()}`:'';
 }
 function automaticScrapboardPoolCandidate(item){
@@ -5710,6 +5710,11 @@ function purchaseQuantityLabel(item){
   const quantity=Number(item.purchaseQuantity??fallbackQuantity);
   return `${quantity.toLocaleString('en-PH',{maximumFractionDigits:2})} ${item.unit||'pc'}`;
 }
+function scrapboardQuantityConversion(unit,entered,rate){
+  const inputQuantity=Number(entered)||0,isKg=unit==='kg';
+  const purchaseQuantity=isKg?inputQuantity/1000:inputQuantity;
+  return {inputQuantity,purchaseQuantity,inventoryWeight:isKg?inputQuantity:inputQuantity,suggestedAmount:roundMoney(purchaseQuantity*(Number(rate)||0)),inputUnit:isKg?'g':'pc',storedUnit:isKg?'kg':'pc'};
+}
 function scrapboardBuyingSections(items=scrapboardItems()){
   const sections=[];
   const byLabel=new Map();
@@ -5771,7 +5776,7 @@ function renderBuying(){
   const systemRate=roundPeso(rateObj?.rate||0),enteredRate=buyingDraftValue('b_rate'),parsedRate=Number(enteredRate);
   const rateOverrideAllowed=canOverrideBuyingRate(),savedOverride=rateOverrideAllowed&&buyingDraftForm.b_rate_overridden==='true';
   const rate=savedOverride&&enteredRate!==''&&Number.isFinite(parsedRate)?roundPeso(parsedRate):systemRate;
-  const rateOverridden=savedOverride&&rate!==systemRate,suggested=roundPeso(quantity*rate);
+  const rateOverridden=savedOverride&&rate!==systemRate,quantityConversion=scrapboardQuantityConversion(item.unit,quantity,rate),suggested=quantityConversion.suggestedAmount;
   const sections=scrapboardBuyingSections(activeItems);
   const selectedSection=sections.find(section=>section.items.some(option=>option.key===key))||sections[0];
   const selectedSearchLabel=scrapboardBuyingSearchLabel(item);
@@ -5792,10 +5797,10 @@ function renderBuying(){
         <input id="b_metal" type="hidden" value="Scrapboard"><input id="b_itemtype" type="hidden" value="Scrapboard"><input id="b_ded" type="hidden" value="0"><input id="b_status" type="hidden" value="Available"><input id="b_rate_sheet" type="hidden" value="${buyingRateSheet}">
         <div class="field scrap-item-picker"><label>Scrapboard category</label><div class="scrap-category-choices" role="group" aria-label="Scrapboard categories">${sections.map(section=>`<button type="button" class="scrap-category-choice ${section.label===selectedSection.label?'is-active':''}" aria-pressed="${section.label===selectedSection.label}" onclick="setScrapboardBuyingCategory('${encodeURIComponent(section.label)}')"><span>${esc(section.label)}</span><small>${section.items.length}</small></button>`).join('')}</div></div>
         <div class="field scrap-classification-search"><label for="b_item_search">Search classification</label><input id="b_karat" type="hidden" value="${esc(key)}"><div class="scrap-search-combobox"><input id="b_item_search" value="${esc(selectedSearchLabel)}" data-selected-label="${esc(selectedSearchLabel)}" placeholder="Type a classification" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="b_item_search_results" onfocus="openScrapboardBuyingSearch(this)" oninput="filterScrapboardBuyingItems(this.value)" onblur="closeScrapboardBuyingSearchSoon()"><div id="b_item_search_results" class="scrap-search-results is-hidden" role="listbox">${selectedSection.items.map(option=>`<button type="button" role="option" aria-selected="${option.key===key}" data-scrap-search-item onclick="selectScrapboardBuyingItem('${encodeURIComponent(option.key)}')"><span><strong>${esc(option.label)}</strong>${option.subcategory?`<small>${esc(option.subcategory)}</small>`:''}</span><b>${fmtMoney(scrapboardRateMap(buyingRateSheet)?.[option.key]||option.rate)}/${option.unit}</b></button>`).join('')}<div class="scrap-search-empty is-hidden" data-scrap-search-empty>No matching classification</div></div></div><span class="scrap-rate-note">Selected: ${esc(selectedSection.label)} · ${esc(selectedSearchLabel)}</span></div>
-        <div class="field"><label for="b_gross">Quantity</label><div class="scrap-quantity-wrap"><input id="b_gross" type="number" min="0" step="${item.unit==='kg'?'0.01':'1'}" value="${esc(quantityValue)}" placeholder="0" oninput="recalcBuying();scheduleBuyingDraftSave()"><span class="scrap-unit" id="scrap_unit">${item.unit}</span></div><span class="scrap-rate-note">Rate is per ${item.unit==='kg'?'kilogram':'piece'}.</span></div>
+        <div class="field"><label for="b_gross">Quantity (${quantityConversion.inputUnit})</label><div class="scrap-quantity-wrap"><input id="b_gross" type="number" min="0" step="1" value="${esc(quantityValue)}" placeholder="0" oninput="recalcBuying();scheduleBuyingDraftSave()"><span class="scrap-unit" id="scrap_unit">${quantityConversion.inputUnit}</span></div><span class="scrap-rate-note">Rate is per ${item.unit==='kg'?'kilogram':'piece'}.</span></div>
       </div>
       <div class="payout-calculator">
-        <div><span>Quantity</span><strong id="b_net_display">${quantity.toLocaleString('en-PH',{maximumFractionDigits:2})} ${item.unit}</strong></div>
+        <div><span>Quantity</span><strong id="b_net_display">${quantityConversion.inputQuantity.toLocaleString('en-PH',{maximumFractionDigits:2})} ${quantityConversion.inputUnit}${item.unit==='kg'?` (${quantityConversion.purchaseQuantity.toLocaleString('en-PH',{maximumFractionDigits:3})} kg)`:''}</strong></div>
         <div class="buying-rate ${rateOverridden?'is-overridden':''}" id="b_rate_panel"><label id="b_rate_label" for="b_rate">${rateOverridden?'Rate override':scrapboardRateSheetLabel(buyingRateSheet)}</label><div><span>₱</span><input id="b_rate" type="number" min="1" step="1" value="${rate}" ${rateOverrideAllowed?'onfocus="selectBuyingOverrideValue(this)" oninput="markBuyingRateOverride();recalcBuying();scheduleBuyingDraftSave()"':'readonly aria-readonly="true"'}><span>/${item.unit}</span></div><span id="b_daily_rate_reference" class="daily-rate-reference ${rateOverridden?'':'is-hidden'}">${scrapboardRateSheetLabel(buyingRateSheet)}: ${fmtMoney(systemRate)}/${item.unit}</span><button type="button" id="b_rate_reset" class="rate-reset ${rateOverridden?'':'is-hidden'}" onclick="resetBuyingRate();scheduleBuyingDraftSave()">Use sheet rate</button></div>
         <div class="suggested"><span>Calculated amount</span><strong id="b_suggested_display">${fmtMoney(suggested)}</strong></div>
         <div class="final-payout"><label for="b_payout">Final payout</label><div><span>₱</span><input id="b_payout" type="number" min="0" step="1" value="${esc(buyingDraftValue('b_payout'))}" placeholder="${suggested}" oninput="scheduleBuyingDraftSave()"></div></div>
@@ -5812,7 +5817,7 @@ function handleScrapboardItemChange(key){
   if(selection)selection.value=key;
   const item=scrapboardItem(key),active=activeRate('Scrapboard',key,selectedBuyingRateSheet()),rateInput=document.getElementById('b_rate'),unit=document.getElementById('scrap_unit');
   if(rateInput) rateInput.value=String(roundPeso(active?.rate||0));
-  if(unit) unit.textContent=item.unit;
+  if(unit) unit.textContent=item.unit==='kg'?'g':'pc';
   recalcBuying();scheduleBuyingDraftSave();render();
 }
 function recalcBuying(){
@@ -5821,9 +5826,9 @@ function recalcBuying(){
   if(!canOverrideBuyingRate()&&rateInput) rateInput.value=String(systemRate);
   const entered=Number(rateInput?.value),rate=Number.isFinite(entered)?roundPeso(entered):0,rateOverridden=canOverrideBuyingRate()&&rate!==systemRate;
   buyingDraftForm.b_rate_overridden=rateOverridden?'true':'false';
-  const suggested=roundPeso(quantity*rate);
+  const quantityConversion=scrapboardQuantityConversion(item.unit,quantity,rate),suggested=quantityConversion.suggestedAmount;
   const netEl=document.getElementById('b_net_display'),suggestedEl=document.getElementById('b_suggested_display'),payoutEl=document.getElementById('b_payout');
-  if(netEl) netEl.textContent=`${quantity.toLocaleString('en-PH',{maximumFractionDigits:2})} ${item.unit}`;
+  if(netEl) netEl.textContent=`${quantityConversion.inputQuantity.toLocaleString('en-PH',{maximumFractionDigits:2})} ${quantityConversion.inputUnit}${item.unit==='kg'?` (${quantityConversion.purchaseQuantity.toLocaleString('en-PH',{maximumFractionDigits:3})} kg)`:''}`;
   if(suggestedEl) suggestedEl.textContent=fmtMoney(suggested);
   if(payoutEl) payoutEl.placeholder=String(suggested);
   document.getElementById('b_rate_panel')?.classList.toggle('is-overridden',rateOverridden);
@@ -5836,10 +5841,10 @@ function purchaseItemFromForm(){
   if(definition.unit==='pc'&&!Number.isInteger(quantity)){toast('Piece quantity must be a whole number');return null;}
   const rateSheet=selectedBuyingRateSheet(),rateObj=activeRate('Scrapboard',key,rateSheet),systemRate=roundPeso(rateObj?.rate||0),rate=canOverrideBuyingRate()?roundPeso(Number(val('b_rate'))):systemRate;
   if(!Number.isFinite(rate)||rate<=0){toast('Enter a valid buying rate');return null;}
-  const suggested=roundPeso(quantity*rate),payoutInput=val('b_payout'),payout=payoutInput?roundPeso(Number(payoutInput)):suggested;
+  const quantityConversion=scrapboardQuantityConversion(definition.unit,quantity,rate),suggested=quantityConversion.suggestedAmount,payoutInput=val('b_payout'),payout=payoutInput?roundPeso(Number(payoutInput)):suggested;
   if(!Number.isFinite(payout)||payout<0){toast('Enter a valid final payout');return null;}
-  const inventoryWeight=definition.unit==='kg'?roundWeight(quantity*1000):quantity;
-  return {id:uid('line'),metal:'Scrapboard',itemType:'Scrapboard',karat:key,scrapboardCategoryKey:scrapboardItemCategoryKey(key),scrapboardRateSheet:rateSheet,unit:definition.unit,purchaseQuantity:quantity,grossWeight:inventoryWeight,deductions:0,netWeight:inventoryWeight,currentWeight:inventoryWeight,rate,systemRate,rateOverridden:rate!==systemRate,payoutOverridden:payout!==suggested,suggestedAmount:suggested,payout,remarks:val('b_remarks').trim(),overrideReason:''};
+  const inventoryWeight=roundWeight(quantityConversion.inventoryWeight);
+  return {id:uid('line'),metal:'Scrapboard',itemType:'Scrapboard',karat:key,scrapboardCategoryKey:scrapboardItemCategoryKey(key),scrapboardRateSheet:rateSheet,unit:definition.unit,purchaseQuantity:quantityConversion.purchaseQuantity,grossWeight:inventoryWeight,deductions:0,netWeight:inventoryWeight,currentWeight:inventoryWeight,rate,systemRate,rateOverridden:rate!==systemRate,payoutOverridden:payout!==suggested,suggestedAmount:suggested,payout,remarks:val('b_remarks').trim(),overrideReason:''};
 }
 function renderPurchaseBatchPanelMarkup(){
   const total=roundMoney(purchaseBatch.reduce((sum,item)=>sum+Number(item.payout),0));

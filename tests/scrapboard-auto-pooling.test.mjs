@@ -16,11 +16,11 @@ async function loadAutoPoolApi() {
   return context.autoPoolApi;
 }
 
-function scrapboardRecord(id, karat, seller, category = '') {
+function scrapboardRecord(id, karat, seller, category = '', date = '2026-11-10') {
   return {
     id,
-    date: '2026-11-10',
-    recordedAt: `2026-11-10T00:00:0${id.length}.000Z`,
+    date,
+    recordedAt: `${date}T00:00:0${id.length}.000Z`,
     customerName: seller,
     metal: 'Scrapboard',
     itemType: 'Scrapboard',
@@ -64,6 +64,21 @@ test('different classifications or categories never auto-pool together', async (
   const state = api.state();
   assert.equal(state.pools.length, 0);
   assert.equal(state.stock.some(item => item.inventoryPoolId), false);
+});
+
+test('matching scrapboard records from different buying dates stay in separate pools', async () => {
+  const api = await loadAutoPoolApi();
+  api.setRecords([
+    scrapboardRecord('old-a6', 'A6', 'One', '', '2026-11-10'),
+    scrapboardRecord('new-a6-one', 'A6', 'Two', '', '2026-11-11'),
+    scrapboardRecord('new-a6-two', 'A6', 'Three', '', '2026-11-11')
+  ]);
+
+  assert.equal(api.pool(['new-a6-two']), 2);
+  const state = api.state();
+  assert.equal(state.pools.length, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(state.pools[0].itemIds.sort())), ['new-a6-one', 'new-a6-two']);
+  assert.equal(state.stock.find(item => item.id === 'old-a6').inventoryPoolId, undefined);
 });
 
 test('a later matching purchase is appended to the existing automatic pool', async () => {
