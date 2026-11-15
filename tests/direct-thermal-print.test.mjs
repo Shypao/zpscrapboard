@@ -87,12 +87,15 @@ test('device print preference follows the selected Android method and exposes a 
   assert.match(h.context.window.location.href,/^intent:base64,/);
 });
 
-test('Android receipt setup defaults to browser print while exposing manual RawBT ESC/POS', async () => {
-  const h = await harness();
+test('Android receipt setup defaults to direct RawBT while exposing manual browser print', async () => {
+  const h = await harness({method:'',saved:''});
   h.api.openPurchaseReceipt('buy-test');
   assert.match(h.appended[0].innerHTML, /Direct thermal \(RawBT ESC\/POS\)/i);
   assert.match(h.appended[0].innerHTML, /Browser print/);
-  assert.equal(h.api.receiptPrintMethod(),'browser');
+  assert.equal(h.api.receiptPrintMethod(),'rawbt');
+  h.api.printPurchaseReceipt('buy-test');
+  assert.match(h.context.window.location.href,/^intent:base64,/);
+  assert.equal(h.calls.filter(Array.isArray).length,0);
 });
 
 
