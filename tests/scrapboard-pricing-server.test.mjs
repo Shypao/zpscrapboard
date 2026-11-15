@@ -190,6 +190,19 @@ test('catalog management allows a built-in category tombstone only after its ite
   assert.equal(result.allowedMessage, '');
 });
 
+test('catalog management allows unused built-in item deletion and blocks referenced items', () => {
+  const candidate = structuredClone(currentPricing);
+  candidate.scrapboardItemSettings = { A6: { active: false, deleted: true } };
+  const result = serverPricingProbe(`
+    let unusedMessage = '', referencedMessage = '';
+    try { server.validateCatalogManagementCandidate({ pricing: ${JSON.stringify(currentPricing)} }, ${JSON.stringify(candidate)}); } catch (error) { unusedMessage = error.message; }
+    try { server.validateCatalogManagementCandidate({ pricing: ${JSON.stringify(currentPricing)}, stock: [{ karat: 'A6' }] }, ${JSON.stringify(candidate)}); } catch (error) { referencedMessage = error.message; }
+    process.stdout.write(JSON.stringify({ unusedMessage, referencedMessage }));
+  `);
+  assert.equal(result.unusedMessage, '');
+  assert.match(result.referencedMessage, /used in history/i);
+});
+
 test('catalog management allows deleting a custom category after its last item moved by override', () => {
   const movedCurrent = structuredClone(currentPricing);
   movedCurrent.scrapboardItemSettings = { CUSTOM_NEW: { label: 'New', group: 'Whole boards', unit: 'pc', active: true } };
