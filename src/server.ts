@@ -210,11 +210,13 @@ export function validateCatalogManagementCandidate(state:Record<string,any>,cand
     if(!categoryKeys.includes(group))throw new Error('Invalid item category');
     if(!['kg','pc'].includes(unit))throw new Error('Invalid item unit');
     if(setting.active!==undefined&&typeof setting.active!=='boolean')throw new Error('Invalid item active state');
+    if(setting.deleted!==undefined&&typeof setting.deleted!=='boolean')throw new Error('Invalid item deletion state');
     if(setting.order!==undefined&&(!Number.isInteger(Number(setting.order))||Number(setting.order)<0))throw new Error('Invalid item order');
+    if(setting.deleted===true&&stateReferencesCatalogKey(state,item.key))throw new Error(`Item ${item.key} is used in history`);
   }
   for(const key of categoryKeys){
     if(categorySettings[key]?.deleted!==true)continue;
-    const containsItems=allItems.some(item=>String(itemSettings[item.key]?.group||item.group)===key);
+    const containsItems=allItems.some(item=>itemSettings[item.key]?.deleted!==true&&String(itemSettings[item.key]?.group||item.group)===key);
     if(containsItems)throw new Error(`Category ${key} still contains items`);
   }
   for(const rateKey of ['scrapboardRates','scrapboardBulkRates']){

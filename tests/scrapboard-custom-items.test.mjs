@@ -470,13 +470,36 @@ test('item editor exposes label category unit active state and safe delete rules
   assert.match(builtIn, /value="A6"/);
   assert.match(builtIn, /value="kg" selected/);
   assert.match(builtIn, />Deactivate</);
-  assert.doesNotMatch(builtIn, /Delete permanently/);
+  assert.match(builtIn, /Delete permanently/);
 
   assert.match(api.itemEditor(key), /Delete permanently/);
   api.referenceItem(key);
   assert.doesNotMatch(api.itemEditor(key), /Delete permanently/);
   await api.editItem(key, { label: 'Editable Chip', group: 'Editable Parts', unit: 'pc', active: false });
   assert.match(api.itemEditor(key), />Activate</);
+});
+
+test('catalog cards expose direct delete only when validation allows it', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  await api.addCategory('Empty Direct Delete');
+
+  let html = api.renderRates();
+  assert.match(html, /confirmDeleteScrapboardCategory\('Empty%20Direct%20Delete'\)[^>]*>Delete<\/button>/);
+  assert.match(html, /confirmDeleteScrapboardItem\('A6'\)[^>]*>Delete<\/button>/);
+
+  api.referenceItem('A6');
+  html = api.renderRates();
+  assert.doesNotMatch(html, /confirmDeleteScrapboardItem\('A6'\)[^>]*>Delete<\/button>/);
+});
+
+test('unused built-in items can be permanently deleted while keeping their archived label', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+
+  assert.equal(await api.deleteItem('A6'), true);
+  assert.equal(api.catalog(true).some(item => item.key === 'A6'), false);
+  assert.equal(api.label('A6'), 'A6');
 });
 
 test('inactive definitions remain visible in management while disappearing from rates buying and export', async () => {

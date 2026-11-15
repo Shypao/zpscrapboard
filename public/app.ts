@@ -448,12 +448,12 @@ function scrapboardItems(includeInactive=false){
   return rawScrapboardItems().map((item,index)=>{
     const setting=catalogOwnSetting(itemSettings,item.key);
     const category=scrapboardCategoryEntry(setting.group||item.group,true)||scrapboardCategoryEntry(item.group,true);
-    const ownActive=setting.active!==false,active=ownActive&&category?.active!==false;
+    const ownActive=setting.active!==false,deleted=setting.deleted===true,active=!deleted&&ownActive&&category?.active!==false;
     const configuredOrder=Number(setting.order),order=Number.isInteger(configuredOrder)&&configuredOrder>=0?configuredOrder:index;
     const resolved={...item,label:normalizedCatalogName(setting.label)||item.label,unit:['kg','pc'].includes(setting.unit)?setting.unit:item.unit,group:category?.label||item.group,categoryKey:category?.key||item.group,order,rawOrder:index};
-    return {...resolved,ownActive,active};
-  }).filter(item=>includeInactive||item.active).sort((a,b)=>(categoryOrder.get(a.categoryKey)??999)-(categoryOrder.get(b.categoryKey)??999)||a.order-b.order||a.rawOrder-b.rawOrder).map(item=>{
-    const {categoryKey,order,rawOrder,...orderedItem}=item;
+    return {...resolved,ownActive,active,deleted};
+  }).filter(item=>!item.deleted&&(includeInactive||item.active)).sort((a,b)=>(categoryOrder.get(a.categoryKey)??999)-(categoryOrder.get(b.categoryKey)??999)||a.order-b.order||a.rawOrder-b.rawOrder).map(item=>{
+    const {categoryKey,order,rawOrder,deleted,...orderedItem}=item;
     if(includeInactive)return orderedItem;
     const {active,ownActive,...resolved}=orderedItem;return resolved;
   });
@@ -552,12 +552,17 @@ function editScrapboardItem(key,changes){ return queueScrapboardCatalogMutation(
 function deleteScrapboardItem(key){ return queueScrapboardCatalogMutation(async()=>{
   if(!isAdmin()) return false;
   const custom=(db.pricing.customScrapboardItems||[]).find(item=>item.key===key);
-  if(!custom||scrapboardCatalogReferenced(key)) return false;
+  const builtIn=SCRAPBOARD_ITEMS.find(item=>item.key===key);
+  if((!custom&&!builtIn)||scrapboardCatalogReferenced(key)) return false;
   const before=catalogPricingSnapshot();
-  db.pricing.customScrapboardItems=db.pricing.customScrapboardItems.filter(item=>item.key!==key);
-  const settings={...(db.pricing.scrapboardItemSettings||{})};delete settings[key];db.pricing.scrapboardItemSettings=settings;
-  const rates={...(db.pricing.scrapboardRates||{})};delete rates[key];db.pricing.scrapboardRates=rates;
-  const bulkRates={...(db.pricing.scrapboardBulkRates||{})};delete bulkRates[key];db.pricing.scrapboardBulkRates=bulkRates;
+  const settings={...(db.pricing.scrapboardItemSettings||{})};
+  if(custom){
+    db.pricing.customScrapboardItems=db.pricing.customScrapboardItems.filter(item=>item.key!==key);
+    delete settings[key];
+    const rates={...(db.pricing.scrapboardRates||{})};delete rates[key];db.pricing.scrapboardRates=rates;
+    const bulkRates={...(db.pricing.scrapboardBulkRates||{})};delete bulkRates[key];db.pricing.scrapboardBulkRates=bulkRates;
+  }else settings[key]={...catalogOwnSetting(settings,key),active:false,deleted:true};
+  db.pricing.scrapboardItemSettings=settings;
   if(await savePricingDB(false,'catalog-management')) return true;
   restoreCatalogPricing(before);return false;
 }); }
@@ -653,7 +658,12 @@ function customPurityGradeKey(value){
   return `${Number(purity.toFixed(2))}%`;
 }
 function gradeLabel(metal, key){
-  if(metal==='Scrapboard') return scrapboardItems(true).find(item=>item.key===key)?.label||key;
+  if(metal==='Scrapboard'){
+    const visible=scrapboardItems(true).find(item=>item.key===key);
+    if(visible)return visible.label;
+    const archived=rawScrapboardItems().find(item=>item.key===key),setting=catalogOwnSetting(db.pricing?.scrapboardItemSettings||{},key);
+    return normalizedCatalogName(setting.label)||archived?.label||key;
+  }
   const g=gradeMeta(metal,key);
   if(g) return g.label;
   const customPurity=customPurityFromKey(key);
@@ -1285,7 +1295,7 @@ function scrapboardCategoryCanDelete(key){
   return Boolean(category&&!scrapboardCategoryItems(category.key).length);
 }
 function scrapboardItemCanDelete(key){
-  return Boolean((db.pricing?.customScrapboardItems||[]).some(item=>item.key===key)&&!scrapboardCatalogReferenced(key));
+  return Boolean(rawScrapboardItems().some(item=>item.key===key)&&!scrapboardCatalogReferenced(key));
 }
 let scrapboardCatalogExpanded=false;
 function rememberScrapboardCatalogExpanded(expanded){ scrapboardCatalogExpanded=Boolean(expanded); }
@@ -1370,7 +1380,12 @@ function scrapboardCatalogManagementMarkup(){
   const categories=scrapboardCategoryEntries(true);
   return `<section class="scrap-catalog-manager"><details class="scrap-catalog-details" ${scrapboardCatalogExpanded?'open':''} ontoggle="rememberScrapboardCatalogExpanded(this.open)"><summary class="scrap-catalog-head"><div><div class="eyebrow">Catalog management</div><h2>Edit categories and items</h2><p>Rename, move, deactivate, or safely remove entries. Inactive entries stay in history but disappear from Buying and active rates.</p></div><span class="scrap-catalog-summary-action"><span class="scrap-catalog-count">${scrapboardItems(true).length} items</span><span class="scrap-catalog-toggle-label"><span class="when-closed">Expand catalog</span><span class="when-open">Minimize catalog</span><span class="scrap-catalog-chevron" aria-hidden="true">⌄</span></span></span></summary><div class="scrap-catalog-groups">${categories.map(category=>{
     const items=scrapboardCategoryItems(category.key),categoryToken=catalogActionToken(category.key);
-    return `<article class="scrap-catalog-group${category.active?'':' is-inactive'}" data-catalog-type="category" data-catalog-key="${esc(category.key)}" ondragover="overScrapboardCatalogDrop(event,'category')" ondragleave="leaveScrapboardCatalogDrop(event)" ondrop="dropScrapboardCatalog(event,'category','${categoryToken}')"><div class="scrap-catalog-group-head"><div><span class="scrap-drag-handle" draggable="true" title="Drag to rearrange category" aria-label="Drag to rearrange category" ondragstart="startScrapboardCatalogDrag(event,'category','${categoryToken}')" ondragend="endScrapboardCatalogDrag()" onpointerdown="startScrapboardCatalogPointer(event,'category','${categoryToken}')" onpointermove="moveScrapboardCatalogPointer(event)" onpointerup="endScrapboardCatalogPointer(event)" onpointercancel="clearScrapboardCatalogPointerDrag()">⋮⋮</span><strong>${esc(category.label)}</strong>${category.active?'':'<span class="scrap-catalog-status">Inactive</span>'}<small>${items.length} item${items.length===1?'':'s'}</small></div><button class="btn secondary small" type="button" onclick="openScrapboardCategoryEditor('${categoryToken}')">Manage category</button></div><div class="scrap-catalog-items">${items.length?items.map(item=>`<div class="scrap-catalog-item" data-catalog-type="item" data-catalog-key="${esc(item.key)}" data-catalog-group="${esc(category.key)}" ondragover="overScrapboardCatalogDrop(event,'item')" ondragleave="leaveScrapboardCatalogDrop(event)" ondrop="dropScrapboardCatalog(event,'item','${catalogActionToken(item.key)}','${categoryToken}')"><div><span class="scrap-drag-handle" draggable="true" title="Drag to rearrange item" aria-label="Drag to rearrange item" ondragstart="startScrapboardCatalogDrag(event,'item','${catalogActionToken(item.key)}','${categoryToken}')" ondragend="endScrapboardCatalogDrag()" onpointerdown="startScrapboardCatalogPointer(event,'item','${catalogActionToken(item.key)}','${categoryToken}')" onpointermove="moveScrapboardCatalogPointer(event)" onpointerup="endScrapboardCatalogPointer(event)" onpointercancel="clearScrapboardCatalogPointerDrag()">⋮⋮</span><strong>${esc(item.label)}</strong>${item.active?'':'<span class="scrap-catalog-status">Inactive</span>'}<small>${esc(item.unit)}</small></div><button class="btn secondary small" type="button" onclick="openScrapboardItemEditor('${catalogActionToken(item.key)}')">Edit item</button></div>`).join(''):'<p class="scrap-catalog-empty">No items yet.</p>'}</div></article>`;
+    const categoryDelete=scrapboardCategoryCanDelete(category.key)?`<button class="btn danger small" type="button" onclick="confirmDeleteScrapboardCategory('${categoryToken}')">Delete</button>`:'';
+    const itemMarkup=items.length?items.map(item=>{
+      const itemToken=catalogActionToken(item.key),itemDelete=scrapboardItemCanDelete(item.key)?`<button class="btn danger small" type="button" onclick="confirmDeleteScrapboardItem('${itemToken}')">Delete</button>`:'';
+      return `<div class="scrap-catalog-item" data-catalog-type="item" data-catalog-key="${esc(item.key)}" data-catalog-group="${esc(category.key)}" ondragover="overScrapboardCatalogDrop(event,'item')" ondragleave="leaveScrapboardCatalogDrop(event)" ondrop="dropScrapboardCatalog(event,'item','${itemToken}','${categoryToken}')"><div><span class="scrap-drag-handle" draggable="true" title="Drag to rearrange item" aria-label="Drag to rearrange item" ondragstart="startScrapboardCatalogDrag(event,'item','${itemToken}','${categoryToken}')" ondragend="endScrapboardCatalogDrag()" onpointerdown="startScrapboardCatalogPointer(event,'item','${itemToken}','${categoryToken}')" onpointermove="moveScrapboardCatalogPointer(event)" onpointerup="endScrapboardCatalogPointer(event)" onpointercancel="clearScrapboardCatalogPointerDrag()">⋮⋮</span><strong>${esc(item.label)}</strong>${item.active?'':'<span class="scrap-catalog-status">Inactive</span>'}<small>${esc(item.unit)}</small></div><span class="scrap-catalog-card-actions">${itemDelete}<button class="btn secondary small" type="button" onclick="openScrapboardItemEditor('${itemToken}')">Edit item</button></span></div>`;
+    }).join(''):'<p class="scrap-catalog-empty">No items yet.</p>';
+    return `<article class="scrap-catalog-group${category.active?'':' is-inactive'}" data-catalog-type="category" data-catalog-key="${esc(category.key)}" ondragover="overScrapboardCatalogDrop(event,'category')" ondragleave="leaveScrapboardCatalogDrop(event)" ondrop="dropScrapboardCatalog(event,'category','${categoryToken}')"><div class="scrap-catalog-group-head"><div><span class="scrap-drag-handle" draggable="true" title="Drag to rearrange category" aria-label="Drag to rearrange category" ondragstart="startScrapboardCatalogDrag(event,'category','${categoryToken}')" ondragend="endScrapboardCatalogDrag()" onpointerdown="startScrapboardCatalogPointer(event,'category','${categoryToken}')" onpointermove="moveScrapboardCatalogPointer(event)" onpointerup="endScrapboardCatalogPointer(event)" onpointercancel="clearScrapboardCatalogPointerDrag()">⋮⋮</span><strong>${esc(category.label)}</strong>${category.active?'':'<span class="scrap-catalog-status">Inactive</span>'}<small>${items.length} item${items.length===1?'':'s'}</small></div><span class="scrap-catalog-card-actions">${categoryDelete}<button class="btn secondary small" type="button" onclick="openScrapboardCategoryEditor('${categoryToken}')">Manage category</button></span></div><div class="scrap-catalog-items">${itemMarkup}</div></article>`;
   }).join('')}</div></details></section>`;
 }
 function scrapboardCategoryEditorMarkup(key){
