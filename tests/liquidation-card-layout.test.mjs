@@ -37,5 +37,7 @@ test('buying payout cards use shrinkable responsive columns at intermediate widt
   assert.match(stylesheet, /\.scrap-quantity-wrap\{[^}]*min-width:0/);
   assert.match(stylesheet, /\.scrap-quantity-wrap input,\.scrap-quantity-wrap \.scrap-unit\{[^}]*min-height:40px/);
   assert.match(stylesheet, /@media\(max-width:1100px\)\{\.buying-item-grid\{grid-template-columns:1fr\}/);
+  assert.match(stylesheet, /\.scrap-classification-search\{[^}]*grid-column:span 3/);
+  assert.match(stylesheet, /\.scrap-quantity-field\{[^}]*grid-column:span 2/);
   assert.match(stylesheet, /\.scrap-buying-sheet-row>div:first-child\{[^}]*min-width:0/);
 });
