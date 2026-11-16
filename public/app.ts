@@ -2856,8 +2856,8 @@ function sendRawBtThermalReceipt(items,paperWidth){
   if(!androidThermalPrinting()){openThermalReceiptPrintPage(items,paperWidth);return;}
   try{
     const data=btoa(purchaseReceiptEscPos(items,paperWidth));
-    window.location.href='intent:base64,'+data+'#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;';
-    toast('Sent ESC/POS receipt to RawBT. Any RawBT license notice is added by RawBT itself.');
+    window.location.href='rawbt:base64,'+data;
+    toast('Sent ESC/POS receipt directly to RawBT.');
   }catch{toast('Could not open RawBT. Use Browser print or Bluetooth bridge.');}
 }
 

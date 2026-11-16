@@ -42,11 +42,11 @@ test('direct ESC/POS receipt preserves totals, wraps within 58/80mm columns, and
 test('manual RawBT choice sends direct ESC/POS without opening a browser page',async()=>{
   const h=await harness({method:'rawbt'});h.api.printPurchaseReceipt('buy-test');
   const uri=h.context.window.location.href;
-  assert.match(uri,/^intent:base64,[A-Za-z0-9+/=]+#Intent;scheme=rawbt;package=ru\.a402d\.rawbtprinter;end;$/);
-  const bytes=Buffer.from(uri.split(',')[1].split('#')[0],'base64').toString('binary');
+  assert.match(uri,/^rawbt:base64,[A-Za-z0-9+/=]+$/);
+  const bytes=Buffer.from(uri.split(',')[1],'base64').toString('binary');
   assert.equal(bytes,h.api.purchaseReceiptEscPos(h.items,58));
   assert.equal(h.calls.filter(Array.isArray).length,0);
-  assert.match(h.calls[0],/Sent ESC\/POS receipt to RawBT/);
+  assert.match(h.calls[0],/Sent ESC\/POS receipt directly to RawBT/);
 });
 
 test('native Android bridge sends receipt bytes directly without launching RawBT', async () => {
@@ -84,7 +84,7 @@ test('device print preference follows the selected Android method and exposes a 
   assert.match(h.appended[0].innerHTML,/Direct thermal \(RawBT app\)/);
   assert.match(h.appended[0].innerHTML,/Test printer/);assert.match(h.appended[0].innerHTML,/Browser print/);
   const before=JSON.stringify(h.items);h.api.printThermalTestReceipt();assert.equal(JSON.stringify(h.items),before);
-  assert.match(h.context.window.location.href,/^intent:base64,/);
+  assert.match(h.context.window.location.href,/^rawbt:base64,/);
 });
 
 test('Android receipt setup defaults to direct RawBT while exposing manual browser print', async () => {
@@ -95,7 +95,7 @@ test('Android receipt setup defaults to direct RawBT while exposing manual brows
   assert.match(h.appended[0].innerHTML, /Browser print/);
   assert.equal(h.api.receiptPrintMethod(),'rawbt');
   h.api.printPurchaseReceipt('buy-test');
-  assert.match(h.context.window.location.href,/^intent:base64,/);
+  assert.match(h.context.window.location.href,/^rawbt:base64,/);
   assert.equal(h.calls.filter(Array.isArray).length,0);
 });
 
