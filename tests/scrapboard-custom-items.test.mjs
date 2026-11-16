@@ -101,6 +101,15 @@ test('custom scrapboard catalog and management interfaces are available', async 
   });
 });
 
+test('scrapboard display labels hide the internal CUSTOM prefix', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  assert.equal(await api.addCategory('Display test'), true);
+  assert.equal(await api.addItem('Display test', 'CUSTOM_A3_64_WE6EZU', 'pc', 35), true);
+  const item = api.customItems()[0];
+  assert.equal(api.label(item.key), 'A3_64_WE6EZU');
+});
+
 test('legacy EMCP settings migrate before saving a kg item as pc', async () => {
   const api = await loadCustomItemApi();
   api.setAdmin();

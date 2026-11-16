@@ -657,12 +657,13 @@ function customPurityGradeKey(value){
   if(!Number.isFinite(purity)||purity<=0||purity>100) return '';
   return `${Number(purity.toFixed(2))}%`;
 }
+function scrapboardDisplayLabel(value){ return normalizedCatalogName(value).replace(/^CUSTOM_/i,''); }
 function gradeLabel(metal, key){
   if(metal==='Scrapboard'){
     const visible=scrapboardItems(true).find(item=>item.key===key);
-    if(visible)return visible.label;
+    if(visible)return scrapboardDisplayLabel(visible.label);
     const archived=rawScrapboardItems().find(item=>item.key===key),setting=catalogOwnSetting(db.pricing?.scrapboardItemSettings||{},key);
-    return normalizedCatalogName(setting.label)||archived?.label||key;
+    return scrapboardDisplayLabel(normalizedCatalogName(setting.label)||archived?.label||key);
   }
   const g=gradeMeta(metal,key);
   if(g) return g.label;
