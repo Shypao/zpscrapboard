@@ -66,19 +66,36 @@ test('different classifications or categories never auto-pool together', async (
   assert.equal(state.stock.some(item => item.inventoryPoolId), false);
 });
 
-test('matching scrapboard records from different buying dates stay in separate pools', async () => {
+test('matching scrapboard records from two consecutive buying dates share one pool', async () => {
   const api = await loadAutoPoolApi();
   api.setRecords([
     scrapboardRecord('old-a6', 'A6', 'One', '', '2026-11-10'),
-    scrapboardRecord('new-a6-one', 'A6', 'Two', '', '2026-11-11'),
-    scrapboardRecord('new-a6-two', 'A6', 'Three', '', '2026-11-11')
+    scrapboardRecord('new-a6-one', 'A6', 'Two', '', '2026-11-11')
   ]);
 
-  assert.equal(api.pool(['new-a6-two']), 2);
+  assert.equal(api.pool(['new-a6-one']), 2);
   const state = api.state();
   assert.equal(state.pools.length, 1);
-  assert.deepEqual(JSON.parse(JSON.stringify(state.pools[0].itemIds.sort())), ['new-a6-one', 'new-a6-two']);
-  assert.equal(state.stock.find(item => item.id === 'old-a6').inventoryPoolId, undefined);
+  assert.deepEqual(JSON.parse(JSON.stringify(state.pools[0].itemIds.sort())), ['new-a6-one', 'old-a6']);
+  assert.equal(new Set(state.stock.map(item => item.inventoryPoolId)).size, 1);
+});
+
+test('a two-day automatic pool does not expand into a third buying date', async () => {
+  const api = await loadAutoPoolApi();
+  api.setRecords([
+    scrapboardRecord('day-one', 'A6', 'One', '', '2026-11-10'),
+    scrapboardRecord('day-two', 'A6', 'Two', '', '2026-11-11')
+  ]);
+  api.pool(['day-two']);
+  let state = api.state();
+  state.stock.push(scrapboardRecord('day-three', 'A6', 'Three', '', '2026-11-12'));
+  api.setRecords(state.stock, state.pools);
+
+  assert.equal(api.pool(['day-three']), 0);
+  state = api.state();
+  assert.equal(state.pools.length, 1);
+  assert.equal(state.pools[0].itemIds.includes('day-three'), false);
+  assert.equal(state.stock.find(item => item.id === 'day-three').inventoryPoolId, undefined);
 });
 
 test('a later matching purchase is appended to the existing automatic pool', async () => {

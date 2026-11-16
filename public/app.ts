@@ -3415,8 +3415,21 @@ function inventoryPoolingSelection(){
 function automaticScrapboardPoolKey(item){
   if(String(item?.metal||'').toLowerCase()!=='scrapboard') return '';
   const categoryKey=normalizedCatalogName(item.scrapboardCategoryKey||scrapboardItemCategoryKey(item.karat));
-  const classification=`${String(item.date||'').trim()}|${String(item.karat||'').trim()}`;
+  const classification=String(item.karat||'').trim();
   return categoryKey&&classification?`${categoryKey.toLowerCase()}\u0000${classification.toLowerCase()}`:'';
+}
+function automaticScrapboardPoolDates(pool){
+  return Array.from(new Set((pool?.itemIds||[]).map(id=>db.stock.find(item=>item.id===id)?.date).filter(Boolean))).sort();
+}
+function automaticScrapboardDatesFitTogether(dates){
+  const values=Array.from(new Set((dates||[]).filter(Boolean))).sort();
+  if(values.length<=1)return true;
+  const first=Date.parse(`${values[0]}T00:00:00Z`),last=Date.parse(`${values.at(-1)}T00:00:00Z`);
+  return Number.isFinite(first)&&Number.isFinite(last)&&last-first<=86400000;
+}
+function automaticScrapboardPoolKeyForPool(pool){
+  const sample=db.stock.find(item=>(pool?.itemIds||[]).includes(item.id));
+  return sample?automaticScrapboardPoolKey(sample):'';
 }
 function automaticScrapboardPoolCandidate(item){
   return automaticScrapboardPoolKey(item)&&Number(item.currentWeight)>0&&item.status==='Available'&&!item.inventoryPoolId&&!item.liquidationBatchId&&!item.refiningBatchId;
@@ -3439,14 +3452,28 @@ function autoPoolMatchingScrapboardInventory(newItemIds=[]){
   let pooled=0;
   keys.forEach(key=>{
     const candidates=db.stock.filter(item=>automaticScrapboardPoolCandidate(item)&&automaticScrapboardPoolKey(item)===key);
-    let pool=(db.inventoryPools||[]).find(record=>record.automatic===true&&record.automaticMatchKey===key&&!record.onHold&&inventoryPoolSnapshot(record).weight>0);
-    if(!pool&&candidates.length<2)return;
+    const pools=(db.inventoryPools||[]).filter(record=>record.automatic===true&&!record.onHold&&inventoryPoolSnapshot(record).weight>0&&automaticScrapboardPoolKeyForPool(record)===key&&automaticScrapboardDatesFitTogether(automaticScrapboardPoolDates(record)));
+    let pool=pools[0]||null;
+    if(pools.length>1){
+      pool=mergeInventoryPoolRecords(pools);
+      if(pool)pool.automaticMatchKey=key;
+    }
+    if(pool){
+      const additions=candidates.filter(item=>!pool.itemIds?.includes(item.id)&&automaticScrapboardDatesFitTogether([...automaticScrapboardPoolDates(pool),item.date]));
+      addItemsToAutomaticScrapboardPool(pool,additions);pooled+=additions.length;
+      return;
+    }
+    const candidateDates=Array.from(new Set(candidates.map(item=>item.date))).sort();
+    const hasTwoBuyingDates=candidateDates.length>=2&&automaticScrapboardDatesFitTogether(candidateDates);
+    if(candidates.length<2&&!hasTwoBuyingDates)return;
+    const selectedDates=hasTwoBuyingDates?candidateDates:candidateDates.filter(date=>date===candidateDates[0]);
+    const additions=candidates.filter(item=>selectedDates.includes(item.date));
+    if(additions.length<2)return;
     if(!pool){
       const sample=candidates[0],categoryKey=sample.scrapboardCategoryKey||scrapboardItemCategoryKey(sample.karat),category=scrapboardCategoryEntry(categoryKey,true)?.label||categoryKey;
       pool={id:nextSequenceId('POOL',db.inventoryPools),name:`${category} · ${gradeLabel('Scrapboard',sample.karat)}`,metal:'Scrapboard',karat:sample.karat,scrapboardCategoryKey:categoryKey,automaticMatchKey:key,automatic:true,itemIds:[],originalItems:[],originalWeight:0,originalCost:0,onHold:false,inventoryStatus:'Available',notes:'Automatically pooled by category and classification',createdAt:new Date().toISOString(),createdBy:currentUser?.displayName||'System'};
       db.inventoryPools.push(pool);
     }
-    const additions=candidates.filter(item=>!pool.itemIds?.includes(item.id));
     addItemsToAutomaticScrapboardPool(pool,additions);pooled+=additions.length;
   });
   return pooled;
