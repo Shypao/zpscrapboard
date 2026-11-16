@@ -7949,10 +7949,10 @@ function purchaseQuantityLabel(item) {
     const quantity = Number(item.purchaseQuantity ?? fallbackQuantity);
     return `${quantity.toLocaleString('en-PH', { maximumFractionDigits: 2 })} ${item.unit || 'pc'}`;
 }
-function scrapboardQuantityConversion(unit, entered, rate) {
-    const inputQuantity = Number(entered) || 0, isKg = unit === 'kg';
-    const purchaseQuantity = isKg ? inputQuantity / 1000 : inputQuantity;
-    return { inputQuantity, purchaseQuantity, inventoryWeight: isKg ? inputQuantity : inputQuantity, suggestedAmount: roundMoney(purchaseQuantity * (Number(rate) || 0)), inputUnit: isKg ? 'g' : 'pc', storedUnit: isKg ? 'kg' : 'pc' };
+function scrapboardQuantityConversion(unit, entered, rate, inputUnit = '') {
+    const isKg = unit === 'kg', normalizedInputUnit = isKg && (inputUnit === 'kg' || inputUnit === 'g') ? inputUnit : isKg ? 'g' : 'pc', inputQuantity = Number(entered) || 0;
+    const purchaseQuantity = isKg ? (normalizedInputUnit === 'kg' ? inputQuantity : inputQuantity / 1000) : inputQuantity;
+    return { inputQuantity, purchaseQuantity, inventoryWeight: isKg ? purchaseQuantity * 1000 : inputQuantity, suggestedAmount: roundMoney(purchaseQuantity * (Number(rate) || 0)), inputUnit: normalizedInputUnit, storedUnit: isKg ? 'kg' : 'pc' };
 }
 function scrapboardBuyingSections(items = scrapboardItems()) {
     const sections = [];
@@ -8025,11 +8025,11 @@ function renderBuying() {
     const key = activeItems.some(item => item.key === requested) ? requested : activeItems[0].key;
     const buyingRateSheet = normalizedScrapboardRateSheet(buyingDraftValue('b_rate_sheet', 'normal'));
     const item = scrapboardItem(key), rateObj = activeRate('Scrapboard', key, buyingRateSheet);
-    const quantityValue = buyingDraftValue('b_gross'), quantity = parseFloat(quantityValue) || 0;
+    const quantityValue = buyingDraftValue('b_gross'), quantity = parseFloat(quantityValue) || 0, quantityInputUnit = item.unit === 'kg' && buyingDraftValue('b_quantity_unit', 'g') === 'kg' ? 'kg' : item.unit === 'kg' ? 'g' : 'pc';
     const systemRate = roundPeso(rateObj?.rate || 0), enteredRate = buyingDraftValue('b_rate'), parsedRate = Number(enteredRate);
     const rateOverrideAllowed = canOverrideBuyingRate(), savedOverride = rateOverrideAllowed && buyingDraftForm.b_rate_overridden === 'true';
     const rate = savedOverride && enteredRate !== '' && Number.isFinite(parsedRate) ? roundPeso(parsedRate) : systemRate;
-    const rateOverridden = savedOverride && rate !== systemRate, quantityConversion = scrapboardQuantityConversion(item.unit, quantity, rate), suggested = quantityConversion.suggestedAmount;
+    const rateOverridden = savedOverride && rate !== systemRate, quantityConversion = scrapboardQuantityConversion(item.unit, quantity, rate, quantityInputUnit), suggested = quantityConversion.suggestedAmount;
     const sections = scrapboardBuyingSections(activeItems);
     const selectedSection = sections.find(section => section.items.some(option => option.key === key)) || sections[0];
     const selectedSearchLabel = scrapboardBuyingSearchLabel(item);
@@ -8050,7 +8050,7 @@ function renderBuying() {
         <input id="b_metal" type="hidden" value="Scrapboard"><input id="b_itemtype" type="hidden" value="Scrapboard"><input id="b_ded" type="hidden" value="0"><input id="b_status" type="hidden" value="Available"><input id="b_rate_sheet" type="hidden" value="${buyingRateSheet}">
         <div class="field scrap-item-picker"><label>Scrapboard category</label><div class="scrap-category-choices" role="group" aria-label="Scrapboard categories">${sections.map(section => `<button type="button" class="scrap-category-choice ${section.label === selectedSection.label ? 'is-active' : ''}" aria-pressed="${section.label === selectedSection.label}" onclick="setScrapboardBuyingCategory('${encodeURIComponent(section.label)}')"><span>${esc(section.label)}</span><small>${section.items.length}</small></button>`).join('')}</div></div>
         <div class="field scrap-classification-search"><label for="b_item_search">Search classification</label><input id="b_karat" type="hidden" value="${esc(key)}"><div class="scrap-search-combobox"><input id="b_item_search" value="${esc(selectedSearchLabel)}" data-selected-label="${esc(selectedSearchLabel)}" placeholder="Type a classification" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="b_item_search_results" onfocus="openScrapboardBuyingSearch(this)" oninput="filterScrapboardBuyingItems(this.value)" onblur="closeScrapboardBuyingSearchSoon()"><div id="b_item_search_results" class="scrap-search-results is-hidden" role="listbox">${selectedSection.items.map(option => `<button type="button" role="option" aria-selected="${option.key === key}" data-scrap-search-item onclick="selectScrapboardBuyingItem('${encodeURIComponent(option.key)}')"><span><strong>${esc(option.label)}</strong>${option.subcategory ? `<small>${esc(option.subcategory)}</small>` : ''}</span><b>${fmtMoney(scrapboardRateMap(buyingRateSheet)?.[option.key] || option.rate)}/${option.unit}</b></button>`).join('')}<div class="scrap-search-empty is-hidden" data-scrap-search-empty>No matching classification</div></div></div><span class="scrap-rate-note">Selected: ${esc(selectedSection.label)} · ${esc(selectedSearchLabel)}</span></div>
-        <div class="field scrap-quantity-field"><label for="b_gross">Quantity (${quantityConversion.inputUnit})</label><div class="scrap-quantity-wrap"><input id="b_gross" type="number" min="0" step="1" value="${esc(quantityValue)}" placeholder="0" oninput="recalcBuying();scheduleBuyingDraftSave()"><span class="scrap-unit" id="scrap_unit">${quantityConversion.inputUnit}</span></div><span class="scrap-rate-note">Rate is per ${item.unit === 'kg' ? 'kilogram' : 'piece'}.</span></div>
+        <div class="field scrap-quantity-field"><label for="b_gross">Quantity (${quantityConversion.inputUnit})</label><div class="scrap-quantity-wrap"><input id="b_gross" type="number" min="0" step="${quantityConversion.inputUnit === 'kg' ? '0.001' : '1'}" value="${esc(quantityValue)}" placeholder="0" oninput="recalcBuying();scheduleBuyingDraftSave()">${item.unit === 'kg' ? `<div class="scrap-unit-toggle" role="group" aria-label="Quantity unit"><button type="button" class="${quantityConversion.inputUnit === 'g' ? 'is-active' : ''}" onclick="setScrapboardQuantityUnit('g')">g</button><button type="button" class="${quantityConversion.inputUnit === 'kg' ? 'is-active' : ''}" onclick="setScrapboardQuantityUnit('kg')">kg</button></div>` : `<span class="scrap-unit" id="scrap_unit">pc</span>`}</div><span class="scrap-rate-note">Rate is per ${item.unit === 'kg' ? 'kilogram' : 'piece'}.</span></div>
       </div>
       <div class="payout-calculator">
         <div><span>Quantity</span><strong id="b_net_display">${quantityConversion.inputQuantity.toLocaleString('en-PH', { maximumFractionDigits: 2 })} ${quantityConversion.inputUnit}${item.unit === 'kg' ? ` (${quantityConversion.purchaseQuantity.toLocaleString('en-PH', { maximumFractionDigits: 3 })} kg)` : ''}</strong></div>
@@ -8070,22 +8070,34 @@ function handleScrapboardItemChange(key) {
     if (selection)
         selection.value = key;
     const item = scrapboardItem(key), active = activeRate('Scrapboard', key, selectedBuyingRateSheet()), rateInput = document.getElementById('b_rate'), unit = document.getElementById('scrap_unit');
+    buyingDraftForm.b_quantity_unit = item.unit === 'kg' ? (buyingDraftForm.b_quantity_unit === 'kg' ? 'kg' : 'g') : 'pc';
     if (rateInput)
         rateInput.value = String(roundPeso(active?.rate || 0));
     if (unit)
-        unit.textContent = item.unit === 'kg' ? 'g' : 'pc';
+        unit.textContent = item.unit === 'kg' ? (buyingDraftForm.b_quantity_unit === 'kg' ? 'kg' : 'g') : 'pc';
     recalcBuying();
     scheduleBuyingDraftSave();
     render();
 }
+function setScrapboardQuantityUnit(next) {
+    const item = scrapboardItem(selectedBuyingGrade());
+    if (item.unit !== 'kg' || !['g', 'kg'].includes(next))
+        return;
+    const currentUnit = buyingDraftForm.b_quantity_unit === 'kg' ? 'kg' : 'g', current = Number(val('b_gross')) || 0, grams = currentUnit === 'kg' ? current * 1000 : current, converted = next === 'kg' ? grams / 1000 : grams;
+    buyingDraftForm.b_quantity_unit = next;
+    buyingDraftForm.b_gross = String(Number(converted.toFixed(3)));
+    render();
+    recalcBuying();
+    scheduleBuyingDraftSave();
+}
 function recalcBuying() {
-    const key = selectedBuyingGrade(), item = scrapboardItem(key), quantity = parseFloat(val('b_gross')) || 0, rateObj = activeRate('Scrapboard', key, selectedBuyingRateSheet()), systemRate = roundPeso(rateObj?.rate || 0);
+    const key = selectedBuyingGrade(), item = scrapboardItem(key), quantity = parseFloat(val('b_gross')) || 0, quantityInputUnit = item.unit === 'kg' && buyingDraftForm.b_quantity_unit === 'kg' ? 'kg' : item.unit === 'kg' ? 'g' : 'pc', rateObj = activeRate('Scrapboard', key, selectedBuyingRateSheet()), systemRate = roundPeso(rateObj?.rate || 0);
     const rateInput = document.getElementById('b_rate');
     if (!canOverrideBuyingRate() && rateInput)
         rateInput.value = String(systemRate);
     const entered = Number(rateInput?.value), rate = Number.isFinite(entered) ? roundPeso(entered) : 0, rateOverridden = canOverrideBuyingRate() && rate !== systemRate;
     buyingDraftForm.b_rate_overridden = rateOverridden ? 'true' : 'false';
-    const quantityConversion = scrapboardQuantityConversion(item.unit, quantity, rate), suggested = quantityConversion.suggestedAmount;
+    const quantityConversion = scrapboardQuantityConversion(item.unit, quantity, rate, quantityInputUnit), suggested = quantityConversion.suggestedAmount;
     const netEl = document.getElementById('b_net_display'), suggestedEl = document.getElementById('b_suggested_display'), payoutEl = document.getElementById('b_payout');
     if (netEl)
         netEl.textContent = `${quantityConversion.inputQuantity.toLocaleString('en-PH', { maximumFractionDigits: 2 })} ${quantityConversion.inputUnit}${item.unit === 'kg' ? ` (${quantityConversion.purchaseQuantity.toLocaleString('en-PH', { maximumFractionDigits: 3 })} kg)` : ''}`;
@@ -8112,7 +8124,7 @@ function purchaseItemFromForm() {
         toast('Enter a valid buying rate');
         return null;
     }
-    const quantityConversion = scrapboardQuantityConversion(definition.unit, quantity, rate), suggested = quantityConversion.suggestedAmount, payoutInput = val('b_payout'), payout = payoutInput ? roundPeso(Number(payoutInput)) : suggested;
+    const quantityInputUnit = definition.unit === 'kg' && buyingDraftForm.b_quantity_unit === 'kg' ? 'kg' : definition.unit === 'kg' ? 'g' : 'pc', quantityConversion = scrapboardQuantityConversion(definition.unit, quantity, rate, quantityInputUnit), suggested = quantityConversion.suggestedAmount, payoutInput = val('b_payout'), payout = payoutInput ? roundPeso(Number(payoutInput)) : suggested;
     if (!Number.isFinite(payout) || payout < 0) {
         toast('Enter a valid final payout');
         return null;

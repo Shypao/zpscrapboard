@@ -22,6 +22,18 @@ test('kg-priced quantity accepts grams and calculates the kg-based payout', asyn
   });
 });
 
+test('kg-priced quantity also accepts kilograms and preserves the same inventory grams', async () => {
+  const api = await quantityApi();
+  assert.deepEqual(JSON.parse(JSON.stringify(api.scrapboardQuantityConversion('kg', 0.26, 1280, 'kg'))), {
+    inputQuantity: 0.26,
+    purchaseQuantity: 0.26,
+    inventoryWeight: 260,
+    suggestedAmount: 332.8,
+    inputUnit: 'kg',
+    storedUnit: 'kg',
+  });
+});
+
 test('pc-priced quantity remains whole pieces', async () => {
   const api = await quantityApi();
   assert.deepEqual(JSON.parse(JSON.stringify(api.scrapboardQuantityConversion('pc', 2, 475))), {

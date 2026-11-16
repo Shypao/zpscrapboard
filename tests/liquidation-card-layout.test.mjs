@@ -30,7 +30,7 @@ test('open liquidation batch summaries use the full card width without excess em
 });
 
 test('buying payout cards use shrinkable responsive columns at intermediate widths', async () => {
-  const stylesheet = await readFile(indexPath, 'utf8');
+  const [stylesheet,source] = await Promise.all([readFile(indexPath, 'utf8'),readFile(appPath, 'utf8')]);
 
   assert.match(stylesheet, /\.payout-calculator\{display:grid;grid-template-columns:repeat\(auto-fit,minmax\(220px,1fr\)/);
   assert.match(stylesheet, /\.payout-calculator>div\{[^}]*min-width:0/);
@@ -39,5 +39,8 @@ test('buying payout cards use shrinkable responsive columns at intermediate widt
   assert.match(stylesheet, /@media\(max-width:1100px\)\{\.buying-item-grid\{grid-template-columns:1fr\}/);
   assert.match(stylesheet, /\.scrap-classification-search\{[^}]*grid-column:span 3/);
   assert.match(stylesheet, /\.scrap-quantity-field\{[^}]*grid-column:span 2/);
+  assert.match(stylesheet, /\.scrap-unit-toggle\{[^}]*display:flex/);
+  assert.match(source, /setScrapboardQuantityUnit\('g'\)/);
+  assert.match(source, /setScrapboardQuantityUnit\('kg'\)/);
   assert.match(stylesheet, /\.scrap-buying-sheet-row>div:first-child\{[^}]*min-width:0/);
 });
