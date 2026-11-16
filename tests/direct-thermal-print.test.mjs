@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import test from 'node:test';
 import vm from 'node:vm';
 
-async function harness({android=true,method='browser',saved='browser',bridge=false}={}){
+async function harness({android=true,method='browser',saved='browser',bridge=false,touch=false}={}){
   const source=await readFile(new URL('../public/app.js',import.meta.url),'utf8');
   const code=source.slice(source.indexOf('function receiptWeightNumber('),source.indexOf('/* ============================= INVENTORY'));
   const values={receipt_paper_size:'58',receipt_print_method:method};
@@ -11,16 +11,16 @@ async function harness({android=true,method='browser',saved='browser',bridge=fal
   const items=[{id:'stk-test',batchId:'buy-test',date:'2026-11-07',metal:'Gold',karat:'22K',itemType:'Scrap',customerName:'Jose\x1bp\x00\nTest',staff:'Admin',netWeight:43.7,rate:7218,payout:315426.6,paymentMethod:'Cash'},
     {id:'stk-2',batchId:'buy-test',date:'2026-11-07',metal:'Gold',karat:'21K',itemType:'Scrap',netWeight:2,rate:6895,payout:13790}];
   const context=vm.createContext({
-    navigator:{userAgent:android?'Android POCO Chrome':'Windows Chrome'},
+    navigator:{userAgent:android?'Android POCO Chrome':'Windows Chrome',maxTouchPoints:touch?5:0},
     btoa:value=>Buffer.from(value,'binary').toString('base64'),
     localStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)},
     sessionStorage:{setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)},
-    window:{location:{href:''},AndroidBluetoothBridge:bridge?{printEscPos:value=>calls.push(['bluetooth',value])}:undefined,open:(...args)=>{calls.push(args);return {};}},
+    window:{location:{href:''},matchMedia:query=>({matches:touch&&query==='(pointer: coarse)'}),AndroidBluetoothBridge:bridge?{printEscPos:value=>calls.push(['bluetooth',value])}:undefined,open:(...args)=>{calls.push(args);return {};}},
     document:{getElementById:()=>null,body:{classList:{remove(){}},appendChild:node=>appended.push(node)},createElement:()=>({addEventListener(){}})},
     db:{stock:items},val:id=>values[id]||'',roundMoney:value=>Math.round(value*100)/100,fmtDate:value=>value,todayStr:()=> '2026-11-07',
     gradeLabel:(_metal,karat)=>karat,esc:value=>String(value),toast:value=>calls.push(value),
   });
-  vm.runInContext(code+'\nglobalThis.api={purchaseReceiptMarkup,purchaseReceiptEscPos,thermalReceiptText,setReceiptPrintMethod,receiptPrintMethod,printPurchaseReceipt,openPurchaseReceipt,printThermalTestReceipt};',context);
+  vm.runInContext(code+'\nglobalThis.api={purchaseReceiptMarkup,purchaseReceiptEscPos,thermalReceiptText,androidThermalPrinting,setReceiptPrintMethod,receiptPrintMethod,printPurchaseReceipt,openPurchaseReceipt,printThermalTestReceipt};',context);
   return {api:context.api,context,calls,items,appended,storage};
 }
 
@@ -97,6 +97,16 @@ test('Android receipt setup defaults to direct RawBT while exposing manual brows
   h.api.printPurchaseReceipt('buy-test');
   assert.match(h.context.window.location.href,/^rawbt:base64,/);
   assert.equal(h.calls.filter(Array.isArray).length,0);
+});
+
+test('touch-capable Android desktop mode still exposes direct RawBT printing', async () => {
+  const h = await harness({android:false,touch:true,method:'',saved:''});
+  assert.equal(h.api.androidThermalPrinting(), true);
+  h.api.openPurchaseReceipt('buy-test');
+  assert.match(h.appended[0].innerHTML, /Direct thermal \(RawBT app\)/i);
+  h.api.printPurchaseReceipt('buy-test');
+  assert.match(h.context.window.location.href, /^rawbt:base64,/);
+  assert.equal(h.calls.filter(Array.isArray).length, 0);
 });
 
 

@@ -3667,7 +3667,19 @@ function setReceiptPaperSize(value) {
     }
     catch { }
 }
-function androidThermalPrinting() { return typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || ''); }
+function androidThermalPrinting() {
+    if (typeof navigator === 'undefined')
+        return false;
+    const userAgent = String(navigator.userAgent || '');
+    if (/Android/i.test(userAgent))
+        return true;
+    // Chrome's Android "Desktop site" mode removes Android from the UA. Keep
+    // direct RawBT available on a touch-first Chrome device in that mode while
+    // avoiding a desktop touchscreen being treated as a mobile printer target.
+    const touchPoints = Number(navigator.maxTouchPoints || navigator.msMaxTouchPoints || 0);
+    const coarsePointer = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+    return touchPoints >= 2 && coarsePointer && /Chrome|CriOS/i.test(userAgent);
+}
 function nativeBluetoothBridgeAvailable() { return typeof window !== 'undefined' && typeof window.AndroidBluetoothBridge?.printEscPos === 'function'; }
 function receiptPrintMethod() {
     if (!androidThermalPrinting())
