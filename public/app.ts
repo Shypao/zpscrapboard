@@ -2828,7 +2828,9 @@ function purchaseReceiptEscPos(items,paperWidth=58){
     if(left.length+right.length+1<=columns)line(left+' '.repeat(columns-left.length-right.length)+right);
     else{wrap(left);thermalReceiptLines(right,columns).forEach(part=>line(part.padStart(columns)));}
   };
-  bytes+=ESC+'a\x01'+ESC+'E\x01'+GS+'!\x10';line('SCRAPBOARD TRADING');
+  // Keep the shop name at normal width. Some thermal printers interpret the
+  // enlarged title mode as double-width and wrap the header at 16 columns.
+  bytes+=ESC+'a\x01'+ESC+'E\x01'+GS+'!\x00';line('SCRAPBOARD TRADING');
   bytes+=GS+'!\x00'+ESC+'E\x00';line('Buying & inventory receipt');bytes+=ESC+'a\x00';
   line(rule);wrap('Date: '+fmtDate(first.date));wrap('Customer: '+(first.customerName||'Walk-in'));
   wrap('Transaction No.: '+(first.batchId||first.id));wrap('Staff name: '+receiptStaffName(first));

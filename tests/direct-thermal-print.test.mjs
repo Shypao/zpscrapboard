@@ -39,6 +39,12 @@ test('direct ESC/POS receipt preserves totals, wraps within 58/80mm columns, and
   }
 });
 
+test('RawBT receipt header keeps the shop name on one normal-width line', async () => {
+  const h = await harness();
+  const data = h.api.purchaseReceiptEscPos(h.items, 58);
+  assert.ok(data.includes('\x1ba\x01\x1bE\x01\x1d!\x00SCRAPBOARD TRADING\n'));
+});
+
 test('manual RawBT choice sends direct ESC/POS without opening a browser page',async()=>{
   const h=await harness({method:'rawbt'});h.api.printPurchaseReceipt('buy-test');
   const uri=h.context.window.location.href;

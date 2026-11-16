@@ -3751,7 +3751,9 @@ function purchaseReceiptEscPos(items, paperWidth = 58) {
             thermalReceiptLines(right, columns).forEach(part => line(part.padStart(columns)));
         }
     };
-    bytes += ESC + 'a\x01' + ESC + 'E\x01' + GS + '!\x10';
+    // Keep the shop name at normal width. Some thermal printers interpret the
+    // enlarged title mode as double-width and wrap the header at 16 columns.
+    bytes += ESC + 'a\x01' + ESC + 'E\x01' + GS + '!\x00';
     line('SCRAPBOARD TRADING');
     bytes += GS + '!\x00' + ESC + 'E\x00';
     line('Buying & inventory receipt');
