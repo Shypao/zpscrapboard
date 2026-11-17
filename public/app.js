@@ -324,7 +324,7 @@ function isAdmin() { return currentUser?.role === 'admin'; }
 function staffRateEditingUnlocked() { return db.pricing?.staffRateEditingUnlocked === true; }
 function canEditDailyRates() { return isAdmin() || staffRateEditingUnlocked(); }
 function canOverrideBuyingRate() { return isAdmin() || staffRateEditingUnlocked(); }
-function allowedTabs() { return TABS.filter(tab => isAdmin() || tab.staff); }
+function allowedTabs() { return TABS.filter(tab => isAdmin() || (!tab.permission && tab.staff) || currentUser?.permissions?.includes(tab.permission)); }
 function showLogin() {
     currentUser = null;
     document.getElementById('appShell')?.classList.add('is-hidden');
@@ -1095,13 +1095,13 @@ function openGoldMultiplierEditor() {
 function closeGoldMultiplierEditor() { document.getElementById('gold_multiplier_modal')?.remove(); }
 /* ============================= NAV / BOOT ============================= */
 const TABS = [
-    { id: 'dashboard', label: 'Dashboard & reports' },
-    { id: 'buying', label: 'New buying transaction', staff: true },
-    { id: 'rates', label: 'Daily rates', staff: true },
-    { id: 'inventory', label: 'Inventory', staff: true },
-    { id: 'liquidation', label: 'Sales & releases' },
-    { id: 'customers', label: 'Customer management' },
-    { id: 'users', label: 'User accounts' },
+    { id: 'dashboard', label: 'Dashboard & reports', permission: 'overview.view' },
+    { id: 'buying', label: 'New buying transaction', permission: 'scrapboard.buy' },
+    { id: 'rates', label: 'Daily rates', permission: 'scrapboard.rates' },
+    { id: 'inventory', label: 'Inventory', permission: 'scrapboard.stock' },
+    { id: 'liquidation', label: 'Sales & releases', permission: 'scrapboard.liquidate' },
+    { id: 'customers', label: 'Customer management', permission: 'scrapboard.customers' },
+    { id: 'users', label: 'User accounts', permission: 'staff.manage' },
 ];
 function boot() {
     const nav = document.getElementById('navTabs');
