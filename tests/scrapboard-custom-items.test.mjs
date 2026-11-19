@@ -483,7 +483,8 @@ test('item editor exposes label category unit active state and safe delete rules
 
   assert.match(api.itemEditor(key), /Delete permanently/);
   api.referenceItem(key);
-  assert.doesNotMatch(api.itemEditor(key), /Delete permanently/);
+  assert.match(api.itemEditor(key), /Delete permanently/);
+  assert.match(api.itemEditor(key), /disabled/);
   await api.editItem(key, { label: 'Editable Chip', group: 'Editable Parts', unit: 'pc', active: false });
   assert.match(api.itemEditor(key), />Activate</);
 });
@@ -499,7 +500,7 @@ test('catalog cards expose direct delete only when validation allows it', async 
 
   api.referenceItem('A6');
   html = api.renderRates();
-  assert.doesNotMatch(html, /confirmDeleteScrapboardItem\('A6'\)[^>]*>Delete<\/button>/);
+  assert.match(html, /confirmDeleteScrapboardItem\('A6'\)[^>]*disabled[^>]*>Delete<\/button>/);
 });
 
 test('unused built-in items can be permanently deleted while keeping their archived label', async () => {
