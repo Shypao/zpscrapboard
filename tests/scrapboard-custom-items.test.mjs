@@ -88,7 +88,7 @@ async function loadCustomItemApi() {
         ensureShape();
         return JSON.parse(JSON.stringify({ categories: db.pricing.scrapboardCategorySettings, items: db.pricing.scrapboardItemSettings }));
       },
-      referenceItem: key => { db.stock.push({ id: 'stock-reference', metal: 'Scrapboard', karat: key }); }
+      referenceItem: key => { db.stock.push({ id: 'stock-reference', date: todayStr(), customerName: 'Walk-in', metal: 'Scrapboard', karat: key, itemType: 'Scrapboard', netWeight: 1, currentWeight: 1, cost: 35, payout: 35, status: 'Available', remarks: '' }); }
     };`, context);
   return context.customItemApi;
 }
@@ -108,6 +108,18 @@ test('scrapboard display labels hide the internal CUSTOM prefix', async () => {
   assert.equal(await api.addItem('Display test', 'CUSTOM_A3_64_WE6EZU', 'pc', 35), true);
   const item = api.customItems()[0];
   assert.equal(api.label(item.key), 'A3_64_WE6EZU');
+});
+
+test('inventory display hides the internal CUSTOM prefix for custom items', async () => {
+  const api = await loadCustomItemApi();
+  api.setAdmin();
+  assert.equal(await api.addCategory('Display test'), true);
+  assert.equal(await api.addItem('Display test', 'CUSTOM_A3_64_WE6EZU', 'pc', 35), true);
+  const item = api.customItems()[0];
+  api.referenceItem(item.key);
+  const html = api.renderInventory();
+  assert.match(html, /A3_64_WE6EZU/);
+  assert.doesNotMatch(html, /CUSTOM_A3_64_WE6EZU/);
 });
 
 test('legacy EMCP settings migrate before saving a kg item as pc', async () => {
