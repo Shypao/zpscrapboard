@@ -1163,6 +1163,85 @@
   @media(max-width:1100px){.buying-item-grid{grid-template-columns:1fr}.scrap-classification-search,.scrap-quantity-field,.buying-item-grid>.field{grid-column:1/-1}}
   @media(max-width:760px){.sidebar{width:100%;flex-basis:auto}.scrap-rate-hero{flex-direction:column}.scrap-rate-hero-tools{width:100%;align-items:stretch}.scrap-rate-downloads{display:grid;grid-template-columns:1fr 1fr}.scrap-rate-download{justify-content:center}.scrap-quick-add,.scrap-quick-add-grid,.scrap-catalog-groups{grid-template-columns:1fr}.scrap-catalog-head{align-items:flex-start;flex-direction:column}.scrap-catalog-summary-action{width:100%;justify-content:space-between}.scrap-catalog-toggle-label{min-width:0}.scrap-rate-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.scrap-rate-card{grid-template-columns:minmax(0,1fr) 72px}.scrap-rate-actions{bottom:8px}.scrap-buying-sheet-row{align-items:stretch;flex-direction:column}.scrap-sheet-toggle{display:grid;grid-template-columns:1fr 1fr}.scrap-sheet-toggle button{width:100%}main{padding:22px 16px 50px}}
   @media(max-width:460px){.scrap-rate-grid{grid-template-columns:1fr}}
+
+  /* ---------- SCRAPBOARD PREMIUM VISUAL LAYER ---------- */
+  .scrapboard-app main{
+    background:
+      radial-gradient(circle at 92% 0%,rgba(201,145,31,.09),transparent 28%),
+      linear-gradient(180deg,#F8F3E8 0%,var(--paper) 58%,#F1E8D4 100%);
+  }
+  .scrapboard-app .page-head{
+    border-bottom-color:#3A3326;
+    box-shadow:0 1px 0 rgba(201,145,31,.22);
+  }
+  .scrapboard-app .page-head h1,
+  .scrapboard-app .block-title,
+  .scrapboard-app .scrap-rate-section>h3,
+  .scrapboard-app .scrap-quick-add h2{
+    color:#30281B;
+    text-shadow:0 1px 0 rgba(255,255,255,.55);
+  }
+  .scrapboard-app #content>section,
+  .scrapboard-app #content>.block{
+    animation:scrapboard-rise .36s ease both;
+  }
+  .scrapboard-app #content>section:nth-child(2){animation-delay:.04s}
+  .scrapboard-app #content>section:nth-child(3){animation-delay:.08s}
+  .scrapboard-app .stat,
+  .scrapboard-app .inventory-breakdown-card,
+  .scrapboard-app .inventory-daily-totals,
+  .scrapboard-app .scrap-rate-card,
+  .scrapboard-app .scrap-quick-add,
+  .scrapboard-app .scrap-catalog-group{
+    border-color:#D4B875;
+    box-shadow:0 8px 22px rgba(72,52,17,.07);
+    transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease,background-color .2s ease;
+  }
+  .scrapboard-app .stat:hover,
+  .scrapboard-app .scrap-rate-card:hover,
+  .scrapboard-app .scrap-catalog-group:hover{
+    border-color:var(--brass-bright);
+    box-shadow:0 12px 28px rgba(72,52,17,.13);
+    transform:translateY(-2px);
+  }
+  .scrapboard-app .btn,
+  .scrapboard-app .inventory-metal-tabs button,
+  .scrapboard-app .inventory-day,
+  .scrapboard-app .scrap-sheet-toggle button{
+    transition:transform .16s ease,box-shadow .16s ease,background-color .16s ease,border-color .16s ease,color .16s ease;
+  }
+  .scrapboard-app .btn:hover:not(:disabled),
+  .scrapboard-app .inventory-metal-tabs button:hover,
+  .scrapboard-app .scrap-sheet-toggle button:hover{
+    box-shadow:0 5px 14px rgba(72,52,17,.14);
+    transform:translateY(-1px);
+  }
+  .scrapboard-app .btn:active:not(:disabled),
+  .scrapboard-app .inventory-metal-tabs button:active,
+  .scrapboard-app .scrap-sheet-toggle button:active{transform:translateY(0)}
+  .scrapboard-app .inventory-today-totals,
+  .scrapboard-app .scrap-rate-hero,
+  .scrapboard-app .scrap-quick-add{border-left:4px solid var(--brass-bright)}
+  .scrapboard-app .scrap-rate-card{background:linear-gradient(145deg,#FFFDF7,var(--paper-2))}
+  .scrapboard-app .scrap-rate-card label{color:#3D2B12}
+  .scrapboard-app .scrap-catalog-group-head{background:linear-gradient(90deg,rgba(201,145,31,.10),transparent)}
+  .scrapboard-app .scrap-catalog-item{transition:background-color .16s ease,padding-left .16s ease}
+  .scrapboard-app .scrap-catalog-item:hover{background:rgba(201,145,31,.08);padding-left:5px}
+  .scrapboard-app .scrap-unit-toggle button.is-active,
+  .scrapboard-app .scrap-sheet-toggle button.is-active{box-shadow:inset 0 0 0 1px rgba(255,255,255,.16),0 3px 10px rgba(72,52,17,.16)}
+  .scrapboard-app :focus-visible{outline:2px solid var(--brass-bright);outline-offset:3px}
+  @keyframes scrapboard-rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
+  @media (prefers-reduced-motion: reduce){
+    .scrapboard-app *,
+    .scrapboard-app #content>section,
+    .scrapboard-app #content>.block{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+    .scrapboard-app .stat:hover,
+    .scrapboard-app .scrap-rate-card:hover,
+    .scrapboard-app .scrap-catalog-group:hover,
+    .scrapboard-app .btn:hover:not(:disabled),
+    .scrapboard-app .inventory-metal-tabs button:hover,
+    .scrapboard-app .scrap-sheet-toggle button:hover{transform:none}
+  }
 </style>
 <script>
   if (window.location.protocol === 'file:') {
@@ -1190,7 +1269,7 @@
     </div>
   </div>
 </section>
-<div class="app is-hidden" id="appShell">
+<div class="app is-hidden scrapboard-app" id="appShell">
   <aside class="sidebar">
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">SB</div>

@@ -760,3 +760,11 @@ test('serialized category saves keep a later successful addition after an earlie
   assert.deepEqual(await Promise.all([first, second]), [false, true]);
   assert.deepEqual([...api.categories()], ['Second Saved']);
 });
+
+test('Scrapboard visual layer is scoped and supports reduced motion', async () => {
+  const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  assert.match(html, /class="app is-hidden scrapboard-app" id="appShell"/);
+  assert.match(html, /\.scrapboard-app \.scrap-rate-card/);
+  assert.match(html, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
+  assert.match(html, /\.scrapboard-app[^}]*animation:\s*none/);
+});
