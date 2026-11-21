@@ -17,4 +17,6 @@ test('theme palette keeps app surfaces readable without the legacy gold palette'
   assert.match(html, /\.scrapboard-app \.summary-grand span,\.scrapboard-app \.summary-grand strong/);
   assert.match(html, /--ink:var\(--theme-panel\)/);
   assert.match(html, /\.scrapboard-app \.scrap-category-choice\.is-active/);
+  assert.match(html, /\.scrapboard-app \.liquidation-batch-buyer strong\{color:var\(--theme-text\);/);
+  assert.match(html, /html\[data-theme="dark"\] \.scrapboard-app \.liquidation-batch-buyer strong\{color:var\(--theme-panel-text\);/);
 });
