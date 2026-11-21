@@ -769,6 +769,8 @@ test('Scrapboard visual layer is scoped and supports reduced motion', async () =
   assert.match(html, /linear-gradient\(180deg,#F3F5F0 0%,var\(--paper\) 58%,#E9EEE8 100%\)/);
   assert.match(html, /\.login-screen\{[^}]*background:\s*radial-gradient\(circle at 72% 18%,rgba\(113,128,109,\.12\)/);
   assert.match(html, /\.login-card\.unified\{[^}]*border-top:3px solid var\(--scrapboard-accent\)/);
+  assert.match(html, /\.scrapboard-app \.sidebar\{[^}]*background:#596557/);
+  assert.match(html, /\.scrapboard-app nav\.tabs button\.active\{[^}]*background:#71806D/);
   assert.match(html, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
   assert.match(html, /\.scrapboard-app[^}]*animation:\s*none/);
 });
