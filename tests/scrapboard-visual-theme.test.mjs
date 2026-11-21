@@ -13,4 +13,8 @@ test('theme palette keeps app surfaces readable without the legacy gold palette'
   assert.match(html, /--theme-accent-soft:#3B5149/);
   assert.match(html, /padding-inline:clamp\(14px,2vw,28px\)/);
   assert.match(html, /padding-block:clamp\(12px,1\.5vw,22px\)/);
+  assert.match(html, /\.scrapboard-app \.summary-grand\{background:var\(--theme-surface-2\);color:var\(--theme-text\);/);
+  assert.match(html, /\.scrapboard-app \.summary-grand span,\.scrapboard-app \.summary-grand strong/);
+  assert.match(html, /--ink:var\(--theme-panel\)/);
+  assert.match(html, /\.scrapboard-app \.scrap-category-choice\.is-active/);
 });

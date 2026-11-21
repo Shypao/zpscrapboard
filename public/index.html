@@ -1330,7 +1330,7 @@
 
       /* ---------- CALM THEME CONSISTENCY & SPACING ---------- */
       html[data-theme="light"],html[data-theme="dark"]{
-        --ink:var(--theme-text);--ink-2:var(--theme-surface-2);--paper:var(--theme-bg);--paper-2:var(--theme-surface-2);--paper-3:var(--theme-border);--line:var(--theme-border);--line-soft:color-mix(in srgb,var(--theme-border) 68%,transparent);--brass:var(--theme-accent);--brass-deep:var(--theme-accent-strong);--brass-bright:var(--theme-accent);--ink-soft:var(--theme-muted);--cream-text:var(--theme-panel-text);--gold-wash:var(--theme-accent-soft);--sage:var(--theme-accent);--rust:#B56D68;
+        --ink:var(--theme-panel);--ink-2:var(--theme-surface-2);--paper:var(--theme-bg);--paper-2:var(--theme-surface-2);--paper-3:var(--theme-border);--line:var(--theme-border);--line-soft:color-mix(in srgb,var(--theme-border) 68%,transparent);--brass:var(--theme-accent);--brass-deep:var(--theme-accent-strong);--brass-bright:var(--theme-accent);--ink-soft:var(--theme-muted);--cream-text:var(--theme-panel-text);--gold-wash:var(--theme-accent-soft);--sage:var(--theme-accent);--rust:#B56D68;
       }
       .scrapboard-app main{padding:clamp(24px,3vw,48px) clamp(18px,3vw,48px) 64px;}
       .scrapboard-app .page-head{padding:0 0 18px;margin-bottom:clamp(24px,3vw,38px);}
@@ -1353,6 +1353,17 @@
       html[data-theme="dark"] .scrapboard-app .table-wrap,html[data-theme="dark"] .scrapboard-app .table-wrap table{background:var(--theme-surface);}
       html[data-theme="dark"] .scrapboard-app .cashflow-flow-strip{background:var(--theme-surface-2);}
       html[data-theme="dark"] .scrapboard-app .scrap-rate-hero h2,html[data-theme="dark"] .scrapboard-app .cashflow-main strong,html[data-theme="dark"] .scrapboard-app .cashflow-stats strong{color:var(--theme-panel-text);}
+      .scrapboard-app .summary-grand{background:var(--theme-surface-2);color:var(--theme-text);border:1px solid var(--theme-border);padding:20px 24px;}
+      .scrapboard-app .summary-grand span,.scrapboard-app .summary-grand strong,.scrapboard-app .summary-grand>div:last-child{color:var(--theme-text);font-weight:800;}
+      html[data-theme="dark"] .scrapboard-app .summary-grand{background:var(--theme-panel);color:var(--theme-panel-text);}
+      html[data-theme="dark"] .scrapboard-app .summary-grand span,html[data-theme="dark"] .scrapboard-app .summary-grand strong,html[data-theme="dark"] .scrapboard-app .summary-grand>div:last-child{color:var(--theme-panel-text);}
+      .scrapboard-app .scrap-category-choice.is-active{background:var(--theme-panel);border-color:var(--theme-panel);color:var(--theme-panel-text);}
+      .scrapboard-app .scrap-category-choice.is-active small{background:var(--theme-accent-soft);color:var(--theme-text);}
+      .scrapboard-app .scrap-sheet-toggle button.is-active,.scrapboard-app .scrap-unit-toggle button.is-active{background:var(--theme-panel);color:var(--theme-panel-text);}
+      .scrapboard-app .payout-calculator>div{background:var(--theme-surface);color:var(--theme-text);}
+      .scrapboard-app .payout-calculator>div:nth-child(3){background:var(--theme-accent-soft);color:var(--theme-text);}
+      .scrapboard-app .payout-calculator>div:last-child{background:var(--theme-panel);color:var(--theme-panel-text);}
+      .scrapboard-app .payout-calculator strong,.scrapboard-app .payout-calculator h3,.scrapboard-app .payout-calculator span{color:inherit;}
       @media(max-width:760px){.scrapboard-app main{padding:22px 16px 50px}.scrapboard-app .stat,.scrapboard-app .form-grid,.scrapboard-app .table-wrap,.scrapboard-app .auto-panel,.scrapboard-app .buying-step,.scrapboard-app .current-payout-card,.scrapboard-app .payout-calculator,.scrapboard-app .block{padding-inline:14px;}}
 </style>
 <script>
