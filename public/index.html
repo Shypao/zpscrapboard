@@ -25,6 +25,14 @@
     --rust:#9A4630;
     --cream-text:#F6F1E4;
     --radius:3px;  }
+  html[data-theme="light"]{
+    color-scheme:light;
+    --theme-bg:#F4F7FA;--theme-surface:#FFFFFF;--theme-surface-2:#EAF0F5;--theme-text:#243247;--theme-muted:#617084;--theme-border:#CFD9E3;--theme-accent:#5D7694;--theme-accent-strong:#3F5E7B;--theme-accent-soft:#DCE7F0;--theme-panel:#334458;--theme-panel-text:#F3F7FA;--theme-shadow:rgba(36,50,71,.10);
+  }
+  html[data-theme="dark"]{
+    color-scheme:dark;
+    --theme-bg:#192430;--theme-surface:#233140;--theme-surface-2:#2D3C4C;--theme-text:#EAF1F6;--theme-muted:#A9B7C5;--theme-border:#415364;--theme-accent:#8EA9C2;--theme-accent-strong:#B4C9DB;--theme-accent-soft:#3A4C5E;--theme-panel:#121B25;--theme-panel-text:#F2F6F8;--theme-shadow:rgba(0,0,0,.28);
+  }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{
@@ -148,6 +156,10 @@
   .sidebar-foot button{
     all:unset;cursor:pointer;color:#B08A3A;font-size:11px;text-decoration:underline;
   }
+  .theme-toggle{display:inline-flex;align-items:center;gap:8px;margin-top:13px;padding:7px 10px!important;border:1px solid currentColor!important;border-radius:999px;color:inherit!important;text-decoration:none!important;font-size:11px!important;line-height:1;cursor:pointer;transition:background-color .18s ease,color .18s ease,border-color .18s ease}
+  .theme-toggle:hover{background:rgba(255,255,255,.12)}
+  .theme-toggle-icon{font-size:14px;line-height:1}
+  .theme-toggle-login{position:absolute;top:22px;right:22px;color:var(--theme-panel-text);border-color:rgba(255,255,255,.55)!important}
   .session-user{color:#C9BE9F;margin-bottom:7px;line-height:1.4;}
   .session-role{text-transform:uppercase;letter-spacing:.08em;font-size:9px;color:#7C7258;}
 
@@ -1265,6 +1277,56 @@
     .scrapboard-app .inventory-metal-tabs button:hover,
     .scrapboard-app .scrap-sheet-toggle button:hover{transform:none}
   }
+
+      /* ---------- SCRAPBOARD SLATE THEME ---------- */
+      html[data-theme="light"] body{background:var(--theme-bg);color:var(--theme-text)}
+      html[data-theme="dark"] body{background:var(--theme-bg);color:var(--theme-text)}
+      .scrapboard-app,
+      .login-screen{color:var(--theme-text)}
+      .scrapboard-app main{background:radial-gradient(circle at 94% 0%,rgba(93,118,148,.10),transparent 30%),linear-gradient(180deg,var(--theme-bg),var(--theme-surface-2));}
+      .scrapboard-app .sidebar{background:linear-gradient(180deg,var(--theme-panel),#253646);border-right-color:var(--theme-border)}
+      .scrapboard-app .brand{border-bottom-color:var(--theme-border)}
+      .scrapboard-app .brand-name,.scrapboard-app .brand-sub{color:var(--theme-panel-text)}
+      .scrapboard-app .brand-sub{opacity:.72}
+      .scrapboard-app nav.tabs button{color:rgba(243,247,250,.78)}
+      .scrapboard-app nav.tabs button .dot{background:rgba(243,247,250,.44)}
+      .scrapboard-app nav.tabs button:hover{background:rgba(142,169,194,.14);color:var(--theme-panel-text)}
+      .scrapboard-app nav.tabs button.active{background:var(--theme-accent);border-left-color:var(--theme-accent-strong);color:#fff}
+      .scrapboard-app nav.tabs button.active .dot{background:#fff}
+      .scrapboard-app .sidebar-foot{border-top-color:var(--theme-border);color:rgba(243,247,250,.72)}
+      .scrapboard-app .session-user{color:var(--theme-panel-text)}
+      .scrapboard-app .session-role{color:rgba(243,247,250,.62)}
+      .scrapboard-app .sidebar-foot button{color:var(--theme-panel-text)}
+      .scrapboard-app .page-head{border-bottom-color:var(--theme-border);box-shadow:0 1px 0 rgba(93,118,148,.14)}
+      .scrapboard-app .page-head h1,.scrapboard-app .block-title,.scrapboard-app .scrap-rate-section>h3,.scrapboard-app .scrap-quick-add h2{color:var(--theme-text);text-shadow:none}
+      .scrapboard-app .eyebrow,.scrapboard-app .hint,.scrapboard-app .form-note,.scrapboard-app small{color:var(--theme-muted)}
+      .scrapboard-app .stat,.scrapboard-app .inventory-breakdown-card,.scrapboard-app .inventory-daily-totals,.scrapboard-app .scrap-rate-card,.scrapboard-app .scrap-quick-add,.scrapboard-app .scrap-catalog-group,.scrapboard-app .block,.scrapboard-app table,.scrapboard-app .modal,.scrapboard-app .summary-modal{background:var(--theme-surface);border-color:var(--theme-border);box-shadow:0 10px 28px var(--theme-shadow)}
+      .scrapboard-app .stat strong,.scrapboard-app .stat h3,.scrapboard-app .scrap-rate-card label,.scrapboard-app .scrap-catalog-item strong,.scrapboard-app table th,.scrapboard-app table td{color:var(--theme-text)}
+      .scrapboard-app input,.scrapboard-app select,.scrapboard-app textarea{background:var(--theme-surface);border-color:var(--theme-border);color:var(--theme-text)}
+      .scrapboard-app input::placeholder,.scrapboard-app textarea::placeholder{color:var(--theme-muted)}
+      .scrapboard-app .btn.secondary,.scrapboard-app .inventory-metal-tabs button,.scrapboard-app .inventory-day,.scrapboard-app .scrap-sheet-toggle button{background:var(--theme-surface);border-color:var(--theme-border);color:var(--theme-text)}
+      .scrapboard-app .btn.secondary:hover,.scrapboard-app .inventory-metal-tabs button:hover,.scrapboard-app .inventory-day:hover,.scrapboard-app .scrap-sheet-toggle button:hover{background:var(--theme-accent-soft);border-color:var(--theme-accent)}
+      .scrapboard-app .btn:not(.secondary),.scrapboard-app .scrap-unit-toggle button.is-active,.scrapboard-app .scrap-sheet-toggle button.is-active{background:var(--theme-accent-strong);border-color:var(--theme-accent-strong);color:#fff}
+      .scrapboard-app .scrap-rate-hero,.scrapboard-app .cashflow-card,.scrapboard-app .final-payout{background:var(--theme-panel);border-color:var(--theme-border);color:var(--theme-panel-text)}
+      .scrapboard-app .scrap-rate-hero p,.scrapboard-app .cashflow-card small,.scrapboard-app .cashflow-eyebrow,.scrapboard-app .cashflow-main small,.scrapboard-app .cashflow-stats span{color:rgba(243,247,250,.72)}
+      .scrapboard-app .cashflow-flow-strip{background:rgba(0,0,0,.18);border-bottom-color:var(--theme-border)}
+      .scrapboard-app .cashflow-actions .btn.secondary{background:transparent;color:var(--theme-panel-text);border-color:rgba(243,247,250,.35)}
+      .scrapboard-app .cashflow-main strong,.scrapboard-app .cashflow-stats strong,.scrapboard-app .final-payout input{color:var(--theme-panel-text)}
+      .scrapboard-app .scrap-rate-card{background:linear-gradient(145deg,var(--theme-surface),var(--theme-surface-2))}
+      .scrapboard-app .scrap-catalog-group-head{background:linear-gradient(90deg,rgba(93,118,148,.12),transparent)}
+      .scrapboard-app .scrap-unit,.scrapboard-app .scrap-unit-toggle{background:var(--theme-surface-2);border-color:var(--theme-border);color:var(--theme-accent-strong)}
+      .scrapboard-app .payout-calculator>div,.scrapboard-app .purchase-added-item>div{border-color:var(--theme-border)}
+      .scrapboard-app :focus-visible{outline-color:var(--theme-accent-strong)}
+      .login-screen{position:relative;background:radial-gradient(circle at 78% 18%,rgba(142,169,194,.28),transparent 32%),linear-gradient(135deg,var(--theme-panel),#58708A);color:var(--theme-panel-text)}
+      .login-brand p{color:rgba(243,247,250,.72)}
+      .login-card{background:var(--theme-surface);border-color:var(--theme-border);color:var(--theme-text);box-shadow:0 24px 60px var(--theme-shadow)}
+      .login-card h2{color:var(--theme-text)}
+      .login-card>p,.login-card .field label{color:var(--theme-muted)}
+      .login-card input{background:var(--theme-surface-2);border-color:var(--theme-border);color:var(--theme-text)}
+      html[data-theme="dark"] .scrapboard-app .table-wrap{background:var(--theme-surface)}
+      html[data-theme="dark"] .scrapboard-app .cashflow-flow-strip{background:#16202B}
+      @media(max-width:760px){.theme-toggle-login{top:12px;right:12px}.scrapboard-app .theme-toggle{margin:8px 10px 0}}
+      @media (prefers-reduced-motion: reduce){.theme-toggle{transition:none}}
 </style>
 <script>
   if (window.location.protocol === 'file:') {
@@ -1274,6 +1336,7 @@
 </head>
 <body>
 <section class="login-screen" id="loginScreen">
+      <button class="theme-toggle theme-toggle-login" type="button" onclick="toggleScrapboardTheme()" data-theme-toggle><span class="theme-toggle-icon" data-theme-toggle-icon aria-hidden="true">☾</span><span data-theme-toggle-label>Dark mode</span></button>
   <div class="login-shell">
     <div class="login-brand">
       <div class="brand-mark" aria-hidden="true">SB</div>
@@ -1302,6 +1365,7 @@
     <nav class="tabs" id="navTabs"></nav>
     <div class="sidebar-foot">
       <div class="session-user" id="sessionUser"></div>
+          <button class="theme-toggle" type="button" onclick="toggleScrapboardTheme()" data-theme-toggle><span class="theme-toggle-icon" data-theme-toggle-icon aria-hidden="true">☾</span><span data-theme-toggle-label>Dark mode</span></button>
       <button onclick="signOut()">Sign out</button>
     </div>
   </aside>
@@ -1320,6 +1384,6 @@
   </main>
 </div>
 
-<script src="./app.js?v=20261108-scrapboard-trading"></script>
+    <script src="./app.js?v=20261122-scrapboard-theme"></script>
 </body>
 </html>

@@ -18,6 +18,7 @@ let cashflowAdjustmentPage = 1;
 let cashflowSearch = '';
 let cashflowAdjustmentSearch = '';
 const STORE_KEY = 'zpp_gold_db';
+const SCRAPBOARD_THEME_KEY = 'scrapboard-theme';
 const LEDGER_DB_NAME = 'zpp_gold_trading_ph';
 const LEDGER_DB_VERSION = 3;
 const ARRAY_STORES = ['customers','stock','inventoryPools','liquidationBatches','liquidations','refiningBatches','retailSales','pricingHistory'];
@@ -242,6 +243,42 @@ async function loadDB(){
 }
 
 function isAdmin(){ return currentUser?.role==='admin'; }
+function normalizedScrapboardTheme(value){ return value==='dark'?'dark':'light'; }
+function scrapboardStoredTheme(){
+  try{
+    const stored=window.localStorage?.getItem(SCRAPBOARD_THEME_KEY);
+    if(stored==='dark'||stored==='light') return stored;
+  }catch(ignore){}
+  try{ return window.matchMedia?.('(prefers-color-scheme: dark)').matches?'dark':'light'; }catch(ignore){ return 'light'; }
+}
+function updateScrapboardThemeControls(){
+  const theme=document.documentElement?.dataset?.theme||'light';
+  document.querySelectorAll?.('[data-theme-toggle]').forEach(button=>{
+    const next=theme==='dark'?'light':'dark';
+    const label=next==='dark'?'Dark mode':'Light mode';
+    button.setAttribute?.('aria-label',`Switch to ${label.toLowerCase()}`);
+    button.setAttribute?.('title',`Switch to ${label.toLowerCase()}`);
+    const text=button.querySelector?.('[data-theme-toggle-label]');
+    if(text) text.textContent=label;
+    const icon=button.querySelector?.('[data-theme-toggle-icon]');
+    if(icon) icon.textContent=next==='dark'?'☾':'☀';
+  });
+}
+function applyScrapboardTheme(theme,persist=true){
+  const normalized=normalizedScrapboardTheme(theme);
+  if(typeof document!=='undefined'&&document.documentElement){
+    document.documentElement.dataset.theme=normalized;
+    document.documentElement.style.colorScheme=normalized;
+    updateScrapboardThemeControls();
+  }
+  if(persist){ try{ window.localStorage?.setItem(SCRAPBOARD_THEME_KEY,normalized); }catch(ignore){} }
+  return normalized;
+}
+function toggleScrapboardTheme(){
+  const current=document.documentElement?.dataset?.theme||scrapboardStoredTheme();
+  return applyScrapboardTheme(current==='dark'?'light':'dark');
+}
+function initializeScrapboardTheme(){ applyScrapboardTheme(scrapboardStoredTheme(),false); }
 function staffRateEditingUnlocked(){ return db.pricing?.staffRateEditingUnlocked===true; }
 function canEditDailyRates(){ return isAdmin()||staffRateEditingUnlocked(); }
 function canOverrideBuyingRate(){ return isAdmin()||staffRateEditingUnlocked(); }
@@ -5965,4 +6002,5 @@ function installButtonDoubleClickGuard(){
 }
 installButtonDoubleClickGuard();
 installLiquidationWeightDismiss();
+initializeScrapboardTheme();
 initializeAuth();
