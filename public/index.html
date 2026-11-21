@@ -41,8 +41,8 @@
     align-items:center;
     justify-content:center;
     background:
-      radial-gradient(circle at 72% 18%,rgba(201,145,31,.16),transparent 30%),
-      linear-gradient(135deg,#151512,#222017);
+      radial-gradient(circle at 72% 18%,rgba(113,128,109,.12),transparent 30%),
+      linear-gradient(135deg,#3E493F,#596557);
     color:var(--cream-text);
   }
 
@@ -51,18 +51,18 @@
   .login-brand h1{font-family:'Fraunces',serif;font-size:34px;margin:0 0 7px;}
   .login-brand p{color:#B9AD8D;margin:0;font-size:13px;}
   .login-options{display:flex;justify-content:center;}
-  .login-card{border:1px solid #4A4433;background:#201F1A;padding:26px;box-shadow:0 20px 55px rgba(0,0,0,.28);}
-  .login-card.unified{width:min(430px,100%);border-top:3px solid var(--brass-bright);}
-  .login-card.admin{border-top:3px solid var(--brass-bright);}
+  .login-card{border:1px solid #AEB9A6;background:#F3F0E7;padding:26px;box-shadow:0 20px 55px rgba(33,43,34,.22);color:#394238;}
+  .login-card.unified{width:min(430px,100%);border-top:3px solid var(--scrapboard-accent);}
+  .login-card.admin{border-top:3px solid var(--scrapboard-accent);}
   .login-card.staff{border-top:3px solid var(--platinum-m);}
-  .login-card h2{font-family:'Fraunces',serif;margin:0 0 5px;font-size:23px;}
-  .login-card>p{font-size:12px;color:#B9AD8D;line-height:1.5;min-height:36px;margin:0 0 18px;}
+  .login-card h2{font-family:'Fraunces',serif;margin:0 0 5px;font-size:23px;color:#394238;}
+  .login-card>p{font-size:12px;color:#687267;line-height:1.5;min-height:36px;margin:0 0 18px;}
   .login-card .field{margin-bottom:12px;}
-  .login-card .field label{color:#C9BE9F;}
-  .login-card input{background:#2B2922;border-color:#4A4433;color:var(--cream-text);width:100%;}
-  .login-card .btn{box-sizing:border-box;min-width:0;justify-content:center;width:100%;border:1px solid var(--brass-bright);}
+  .login-card .field label{color:#566155;}
+  .login-card input{background:#FAF8F1;border-color:#BFCABA;color:#394238;width:100%;}
+  .login-card .btn{box-sizing:border-box;min-width:0;justify-content:center;width:100%;border:1px solid var(--scrapboard-accent);}
   .login-card.staff .btn{border-color:var(--platinum-m);}
-  .login-error{min-height:18px;margin-top:10px;color:#E7A590;font-size:11.5px;}
+  .login-error{min-height:18px;margin-top:10px;color:#9A5D56;font-size:11.5px;}
   .app{
     display:flex;
     min-height:100vh;
@@ -1165,7 +1165,8 @@
   @media(max-width:460px){.scrap-rate-grid{grid-template-columns:1fr}}
 
   /* ---------- SCRAPBOARD PREMIUM VISUAL LAYER ---------- */
-  .scrapboard-app{
+  .scrapboard-app,
+  .login-screen{
     --scrapboard-accent:#71806D;
     --scrapboard-accent-soft:#AEB9A6;
     --scrapboard-ink:#394238;
