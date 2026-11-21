@@ -1165,20 +1165,26 @@
   @media(max-width:460px){.scrap-rate-grid{grid-template-columns:1fr}}
 
   /* ---------- SCRAPBOARD PREMIUM VISUAL LAYER ---------- */
+  .scrapboard-app{
+    --scrapboard-accent:#71806D;
+    --scrapboard-accent-soft:#AEB9A6;
+    --scrapboard-ink:#394238;
+    --scrapboard-line:#CBD4C6;
+  }
   .scrapboard-app main{
     background:
-      radial-gradient(circle at 92% 0%,rgba(201,145,31,.09),transparent 28%),
-      linear-gradient(180deg,#F8F3E8 0%,var(--paper) 58%,#F1E8D4 100%);
+      radial-gradient(circle at 92% 0%,rgba(113,128,109,.08),transparent 28%),
+      linear-gradient(180deg,#F3F5F0 0%,var(--paper) 58%,#E9EEE8 100%);
   }
   .scrapboard-app .page-head{
-    border-bottom-color:#3A3326;
-    box-shadow:0 1px 0 rgba(201,145,31,.22);
+    border-bottom-color:var(--scrapboard-ink);
+    box-shadow:0 1px 0 rgba(113,128,109,.18);
   }
   .scrapboard-app .page-head h1,
   .scrapboard-app .block-title,
   .scrapboard-app .scrap-rate-section>h3,
   .scrapboard-app .scrap-quick-add h2{
-    color:#30281B;
+    color:var(--scrapboard-ink);
     text-shadow:0 1px 0 rgba(255,255,255,.55);
   }
   .scrapboard-app #content>section,
@@ -1193,15 +1199,15 @@
   .scrapboard-app .scrap-rate-card,
   .scrapboard-app .scrap-quick-add,
   .scrapboard-app .scrap-catalog-group{
-    border-color:#D4B875;
-    box-shadow:0 8px 22px rgba(72,52,17,.07);
+    border-color:var(--scrapboard-line);
+    box-shadow:0 8px 22px rgba(57,66,56,.06);
     transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease,background-color .2s ease;
   }
   .scrapboard-app .stat:hover,
   .scrapboard-app .scrap-rate-card:hover,
   .scrapboard-app .scrap-catalog-group:hover{
-    border-color:var(--brass-bright);
-    box-shadow:0 12px 28px rgba(72,52,17,.13);
+    border-color:var(--scrapboard-accent);
+    box-shadow:0 12px 28px rgba(57,66,56,.11);
     transform:translateY(-2px);
   }
   .scrapboard-app .btn,
@@ -1213,7 +1219,7 @@
   .scrapboard-app .btn:hover:not(:disabled),
   .scrapboard-app .inventory-metal-tabs button:hover,
   .scrapboard-app .scrap-sheet-toggle button:hover{
-    box-shadow:0 5px 14px rgba(72,52,17,.14);
+    box-shadow:0 5px 14px rgba(57,66,56,.11);
     transform:translateY(-1px);
   }
   .scrapboard-app .btn:active:not(:disabled),
@@ -1221,15 +1227,15 @@
   .scrapboard-app .scrap-sheet-toggle button:active{transform:translateY(0)}
   .scrapboard-app .inventory-today-totals,
   .scrapboard-app .scrap-rate-hero,
-  .scrapboard-app .scrap-quick-add{border-left:4px solid var(--brass-bright)}
-  .scrapboard-app .scrap-rate-card{background:linear-gradient(145deg,#FFFDF7,var(--paper-2))}
-  .scrapboard-app .scrap-rate-card label{color:#3D2B12}
-  .scrapboard-app .scrap-catalog-group-head{background:linear-gradient(90deg,rgba(201,145,31,.10),transparent)}
+  .scrapboard-app .scrap-quick-add{border-left:4px solid var(--scrapboard-accent)}
+  .scrapboard-app .scrap-rate-card{background:linear-gradient(145deg,#FBFCF8,var(--paper-2))}
+  .scrapboard-app .scrap-rate-card label{color:var(--scrapboard-ink)}
+  .scrapboard-app .scrap-catalog-group-head{background:linear-gradient(90deg,rgba(113,128,109,.09),transparent)}
   .scrapboard-app .scrap-catalog-item{transition:background-color .16s ease,padding-left .16s ease}
-  .scrapboard-app .scrap-catalog-item:hover{background:rgba(201,145,31,.08);padding-left:5px}
+  .scrapboard-app .scrap-catalog-item:hover{background:rgba(113,128,109,.08);padding-left:5px}
   .scrapboard-app .scrap-unit-toggle button.is-active,
   .scrapboard-app .scrap-sheet-toggle button.is-active{box-shadow:inset 0 0 0 1px rgba(255,255,255,.16),0 3px 10px rgba(72,52,17,.16)}
-  .scrapboard-app :focus-visible{outline:2px solid var(--brass-bright);outline-offset:3px}
+  .scrapboard-app :focus-visible{outline:2px solid var(--scrapboard-accent);outline-offset:3px}
   @keyframes scrapboard-rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
   @media (prefers-reduced-motion: reduce){
     .scrapboard-app *,
