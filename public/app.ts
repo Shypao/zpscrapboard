@@ -3458,9 +3458,17 @@ function inventoryPoolingSelection(){
 }
 function automaticScrapboardPoolKey(item){
   if(String(item?.metal||'').toLowerCase()!=='scrapboard') return '';
-  const categoryKey=normalizedCatalogName(item.scrapboardCategoryKey||scrapboardItemCategoryKey(item.karat));
-  const classification=String(item.karat||'').trim();
-  return categoryKey&&classification?`${categoryKey.toLowerCase()}\u0000${classification.toLowerCase()}`:'';
+  const classificationKey=automaticScrapboardClassificationKey(item.karat);
+  const categoryKey=normalizedCatalogName(item.scrapboardCategoryKey||scrapboardItemCategoryKey(item.karat)||scrapboardItemCategoryKey(classificationKey));
+  return categoryKey&&classificationKey?`${categoryKey.toLowerCase()}\u0000${classificationKey.toLowerCase()}`:'';
+}
+function automaticScrapboardClassificationKey(value){
+  const normalized=normalizedCatalogName(value);
+  if(!normalized) return '';
+  const catalogItem=scrapboardItems(true).find(item=>normalizedCatalogName(item.key).toLowerCase()===normalized.toLowerCase()||normalizedCatalogName(item.label).toLowerCase()===normalized.toLowerCase());
+  if(catalogItem) return catalogItem.key;
+  const legacyGrade=normalized.match(/^(A[1-6])\s*\(\s*\d+\s*\)$/i);
+  return legacyGrade?legacyGrade[1]:normalized;
 }
 function automaticScrapboardPoolDates(pool){
   return Array.from(new Set((pool?.itemIds||[]).map(id=>db.stock.find(item=>item.id===id)?.date).filter(Boolean))).sort();
@@ -3514,8 +3522,8 @@ function autoPoolMatchingScrapboardInventory(newItemIds=[]){
     const additions=candidates.filter(item=>selectedDates.includes(item.date));
     if(additions.length<2)return;
     if(!pool){
-      const sample=candidates[0],categoryKey=sample.scrapboardCategoryKey||scrapboardItemCategoryKey(sample.karat),category=scrapboardCategoryEntry(categoryKey,true)?.label||categoryKey;
-      pool={id:nextSequenceId('POOL',db.inventoryPools),name:`${category} · ${gradeLabel('Scrapboard',sample.karat)}`,metal:'Scrapboard',karat:sample.karat,scrapboardCategoryKey:categoryKey,automaticMatchKey:key,automatic:true,itemIds:[],originalItems:[],originalWeight:0,originalCost:0,onHold:false,inventoryStatus:'Available',notes:'Automatically pooled by category and classification',createdAt:new Date().toISOString(),createdBy:currentUser?.displayName||'System'};
+      const sample=candidates[0],classificationKey=automaticScrapboardClassificationKey(sample.karat),categoryKey=sample.scrapboardCategoryKey||scrapboardItemCategoryKey(sample.karat)||scrapboardItemCategoryKey(classificationKey),category=scrapboardCategoryEntry(categoryKey,true)?.label||categoryKey;
+      pool={id:nextSequenceId('POOL',db.inventoryPools),name:`${category} · ${gradeLabel('Scrapboard',classificationKey)}`,metal:'Scrapboard',karat:classificationKey,scrapboardCategoryKey:categoryKey,automaticMatchKey:key,automatic:true,itemIds:[],originalItems:[],originalWeight:0,originalCost:0,onHold:false,inventoryStatus:'Available',notes:'Automatically pooled by category and classification',createdAt:new Date().toISOString(),createdBy:currentUser?.displayName||'System'};
       db.inventoryPools.push(pool);
     }
     addItemsToAutomaticScrapboardPool(pool,additions);pooled+=additions.length;

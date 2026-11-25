@@ -80,6 +80,19 @@ test('matching scrapboard records from two consecutive buying dates share one po
   assert.equal(new Set(state.stock.map(item => item.inventoryPoolId)).size, 1);
 });
 
+test('legacy A3(64) and current A3 records auto-pool across consecutive buying dates', async () => {
+  const api = await loadAutoPoolApi();
+  api.setRecords([
+    scrapboardRecord('old-a3-legacy', 'A3(64)', 'One', '', '2026-11-10'),
+    scrapboardRecord('new-a3', 'A3', 'Two', '', '2026-11-11')
+  ]);
+
+  assert.equal(api.pool(['new-a3']), 2);
+  const state = api.state();
+  assert.equal(state.pools.length, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(state.pools[0].itemIds.sort())), ['new-a3', 'old-a3-legacy']);
+});
+
 test('a two-day automatic pool does not expand into a third buying date', async () => {
   const api = await loadAutoPoolApi();
   api.setRecords([
