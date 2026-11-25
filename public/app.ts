@@ -146,10 +146,20 @@ async function saveDB(){
   try{
     ensureShape();
     if(location.protocol==='http:'||location.protocol==='https:'){
-      const response=await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(db)});
+      const body=JSON.parse(JSON.stringify(db));
+      let response=await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      if(response.status===409){
+        const latestResponse=await fetch('/api/state');
+        if(latestResponse.status===401){ showLogin(); throw new Error('Session expired'); }
+        const latest=await latestResponse.json().catch(()=>null);
+        if(!latestResponse.ok || !Number.isInteger(latest?._revision)) throw new Error(latest?.error||'Could not refresh ledger revision');
+        body._revision=latest._revision;
+        db._revision=latest._revision;
+        response=await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      }
       if(response.status===401){ showLogin(); throw new Error('Session expired'); }
       const result=await response.json().catch(()=>null);
-      if(response.status===409) throw new Error(result?.error||'The database changed in another session. Refresh and try again.');
+      if(response.status===409) throw new Error(result?.error||'The database changed again in another session. Refresh and try again.');
       if(!response.ok) throw new Error(result?.error||'Database server returned HTTP '+response.status);
       if(Number.isInteger(result?.revision)) db._revision=result.revision;
       storageLocationCleanupNeeded=false;
