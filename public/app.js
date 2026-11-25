@@ -218,10 +218,23 @@ async function savePricingDB(includeHistory = false, scope = 'internal') {
         return saveDB();
     try {
         ensureShape();
-        const body = { pricing: db.pricing, scope, revision: db._revision };
+        const body = { pricing: JSON.parse(JSON.stringify(db.pricing)), scope, revision: db._revision };
         if (includeHistory)
             body.pricingHistory = db.pricingHistory;
-        const response = await fetch('/api/pricing', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        let response = await fetch('/api/pricing', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (response.status === 409) {
+            const latestResponse = await fetch('/api/pricing');
+            if (latestResponse.status === 401) {
+                showLogin();
+                throw new Error('Session expired');
+            }
+            const latest = await latestResponse.json().catch(() => null);
+            if (!latestResponse.ok || !Number.isInteger(latest?.revision))
+                throw new Error(latest?.error || 'Could not refresh pricing revision');
+            db._revision = latest.revision;
+            body.revision = db._revision;
+            response = await fetch('/api/pricing', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        }
         if (response.status === 401) {
             showLogin();
             throw new Error('Session expired');
