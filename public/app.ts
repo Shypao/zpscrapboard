@@ -1090,6 +1090,20 @@ function inventoryQuantityTotalsText(entries,fallback='0.00 kg'){
   entries.forEach(entry=>totals.set(entry.unit,(totals.get(entry.unit)||0)+Number(entry.weight||0)));
   return ['pc','kg'].filter(unit=>totals.has(unit)).map(unit=>inventoryQuantityText(totals.get(unit),unit)).join(' · ')||fallback;
 }
+function inventoryQuantityBreakdown(entries,metal='All'){
+  const breakdownMap=new Map();
+  entries.filter(item=>metal==='All'||item.metal===metal).forEach(item=>{
+    const unit=inventoryQuantityUnit(item);
+    const key=`${item.metal}|${item.karat}`;
+    const entry=breakdownMap.get(key)||{metal:item.metal,karat:item.karat,unit,count:0,weight:0,cost:0};
+    if(entry.unit!==unit) entry.unit='kg';
+    entry.count+=1;
+    entry.weight+=Number(item.currentWeight||0);
+    entry.cost+=Number(item.cost||0);
+    breakdownMap.set(key,entry);
+  });
+  return Array.from(breakdownMap.values());
+}
 function dailyMetalPurityBreakdownMarkup(items,metal){
   const totals=purchaseTotalsByPurity(items);
   return `<section class="daily-metal-purity-breakdown"><h3>${esc(metal)} totals by classification</h3>
@@ -1123,6 +1137,9 @@ function renderDashboard(){
   const inventoryMonth=db.stock.filter(s=>s.date.startsWith(mon)&&Number(s.currentWeight)>0&&!['For Liquidation','Liquidated','Refined','Sold'].includes(s.status));
   const inventoryAmountMonth=inventoryMonth.reduce((a,s)=>a+Number(s.cost),0);
   const inventoryWeightMonth=inventoryMonth.reduce((a,s)=>a+Number(s.currentWeight),0);
+  const remainingStock=inventoryDisplayRows(db.stock.filter(activeInventoryRecord));
+  const remainingQuantity=inventoryQuantityTotalsText(inventoryQuantityBreakdown(remainingStock));
+  const remainingRecords=remainingStock.length;
   const todayMetalSummaries=['Scrapboard'].map(metal=>todayPurchaseMetalSummary(pToday,metal));
 
   const liqMonth = db.liquidations.filter(l=>l.date.startsWith(mon));
@@ -1133,7 +1150,7 @@ function renderDashboard(){
   <section class="block">
     <h2 class="block-title">Today &amp; this month</h2>
     <div class="stat-row">
-      <div class="stat"><div class="label">Scrapboard quantity bought today</div><div class="value">${purchaseQuantityTotalsText(pToday)}</div><div class="sub">${fmtMoney(payoutToday)} total payout · ${new Set(pToday.map(item=>String(item.batchId||item.id))).size} purchase${new Set(pToday.map(item=>String(item.batchId||item.id))).size===1?'':'s'}</div></div>
+      <div class="stat"><div class="label">Scrapboard remaining quantity</div><div class="value">${remainingQuantity}</div><div class="sub">${remainingRecords} active inventory record${remainingRecords===1?'':'s'} · matches Inventory</div></div>
       <div class="stat"><div class="label">${esc(monthLabel)} inventory value</div><div class="value">${fmtMoney(inventoryAmountMonth)}</div><div class="sub">${inventoryMonth.length} active item${inventoryMonth.length===1?'':'s'} · ${fmtWeight(inventoryWeightMonth)}</div></div>
       <div class="stat"><div class="label">Scrapboard quantity bought this month</div><div class="value">${purchaseQuantityTotalsText(pMonth)}</div><div class="sub">${fmtMoney(payoutMonth)} total payout · ${new Set(pMonth.map(item=>String(item.batchId||item.id))).size} purchase${new Set(pMonth.map(item=>String(item.batchId||item.id))).size===1?'':'s'}</div></div>
       ${isAdmin()?`<div class="stat"><div class="label">Sales &amp; release margin (month)</div><div class="value">${fmtMoney(liqMargin)}</div><div class="sub">${liqMonth.length} batch(es) released</div></div>
@@ -4212,14 +4229,8 @@ function renderInventory(){
 
   const currentStock=inventoryDisplayRows(allActiveStock);
   const breakdownSource=currentStock.filter(item=>invFilter.metal==='All'||item.metal===invFilter.metal);
-  const breakdownMap=new Map();
-  breakdownSource.forEach(item=>{
-    const key=`${item.metal}|${item.karat}`,entry=breakdownMap.get(key)||{metal:item.metal,karat:item.karat,unit:inventoryQuantityUnit(item),count:0,weight:0,cost:0};
-    if(entry.unit!==inventoryQuantityUnit(item)) entry.unit='kg';
-    entry.count+=1; entry.weight+=Number(item.currentWeight); entry.cost+=Number(item.cost); breakdownMap.set(key,entry);
-  });
   const metalOrder=['Scrapboard','Gold','Silver','Platinum'];
-  const breakdown=Array.from(breakdownMap.values()).sort((a,b)=>(metalOrder.indexOf(a.metal)-metalOrder.indexOf(b.metal))||(gradeSortIndex(a.metal,a.karat)-gradeSortIndex(b.metal,b.karat))||String(a.karat).localeCompare(String(b.karat)));
+  const breakdown=inventoryQuantityBreakdown(breakdownSource).sort((a,b)=>(metalOrder.indexOf(a.metal)-metalOrder.indexOf(b.metal))||(gradeSortIndex(a.metal,a.karat)-gradeSortIndex(b.metal,b.karat))||String(a.karat).localeCompare(String(b.karat)));
   const breakdownRows=invFilter.metal==='All'
     ? metalOrder.flatMap(metal=>{const entries=breakdown.filter(entry=>entry.metal===metal);return entries.length?[`<tr class="inventory-breakdown-metal-header inventory-breakdown-metal-header--${metal.toLowerCase()}"><th colspan="5">${metal}</th></tr>`,...entries.map(entry=>`<tr><td><span class="metal-tag ${entry.metal.toLowerCase()}">${entry.metal}</span></td><td>${esc(gradeLabel(entry.metal,entry.karat))}</td><td class="num">${entry.count}</td><td class="num">${inventoryQuantityText(entry.weight,entry.unit)}</td><td class="num">${fmtMoney(entry.cost)}</td></tr>`)] : []}).join('')
     : breakdown.map(entry=>`<tr><td><span class="metal-tag ${entry.metal.toLowerCase()}">${entry.metal}</span></td><td>${esc(gradeLabel(entry.metal,entry.karat))}</td><td class="num">${entry.count}</td><td class="num">${inventoryQuantityText(entry.weight,entry.unit)}</td><td class="num">${fmtMoney(entry.cost)}</td></tr>`).join('');
