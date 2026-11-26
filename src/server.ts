@@ -598,10 +598,18 @@ async function saveStaffAdditions(candidate: LedgerState, user: AuthUser): Promi
     }
   }
   const currentPools = new Map(current.inventoryPools.map(record => [record.id, record]));
-  const autoPoolFields = new Set(['itemIds', 'originalItems', 'originalWeight', 'originalCost', 'remainingWeight', 'remainingCost', 'status', 'updatedAt']);
+  const autoPoolFields = new Set(['name', 'metal', 'karat', 'scrapboardCategoryKey', 'automaticMatchKey', 'itemIds', 'originalItems', 'originalWeight', 'weightAdjustment', 'originalCost', 'mergedFromPoolIds', 'mergedPoolHistory', 'remainingWeight', 'remainingCost', 'status', 'onHold', 'inventoryStatus', 'updatedAt']);
+  const automaticPoolMergeTrace = (pool: LedgerRecord | undefined, sourceId: string) =>
+    pool?.automatic === true && (
+      (Array.isArray(pool.mergedFromPoolIds) && pool.mergedFromPoolIds.includes(sourceId)) ||
+      (Array.isArray(pool.mergedPoolHistory) && pool.mergedPoolHistory.some((entry: any) => entry?.id === sourceId))
+    );
   for (const record of current.inventoryPools) {
     const next = candidate.inventoryPools.find(item => item.id === record.id);
-    if (!next) throw new Error('Staff cannot edit or remove existing records');
+    if (!next) {
+      if (automaticPoolMergeTrace(candidate.inventoryPools.find(pool => pool.automatic === true) as LedgerRecord, record.id)) continue;
+      throw new Error('Staff cannot edit or remove existing records');
+    }
     const changed = Object.keys({ ...record, ...next }).filter(key => JSON.stringify(record[key]) !== JSON.stringify(next[key]));
     if (changed.length && (!record.automatic || !next.automatic || !changed.every(key => autoPoolFields.has(key)))) {
       throw new Error('Staff cannot edit or remove existing records');
