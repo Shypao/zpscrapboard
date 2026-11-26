@@ -37,3 +37,15 @@ test('failed purchase save never opens a receipt and preserves the draft',async(
   assert.equal(context.snapshot().stock,0);
   assert.equal(context.snapshot().draft,1);
 });
+
+test('save exceptions never open a receipt and roll back the local ledger',async()=>{
+  const {context,events}=await receiptFlow();
+  const messages=[];
+  context.toast=message=>messages.push(message);
+  context.saveDB=async()=>{events.push('saving');throw new Error('Invalid ledger state');};
+  await context.commit(true);
+  assert.deepEqual(events,['saving']);
+  assert.equal(context.snapshot().stock,0);
+  assert.equal(context.snapshot().draft,1);
+  assert.match(messages.at(-1),/Invalid ledger state/);
+});

@@ -179,7 +179,12 @@ async function saveDB(){
     storageLocationCleanupNeeded=false;
     return true;
   }
-  catch(e){ console.error('Save failed', e); toast('Could not save — changes may not persist'); return false; }
+  catch(e){
+    console.error('Save failed', e);
+    const detail=String(e?.message||'').trim();
+    toast(detail?`Could not save — ${detail}`:'Could not save — changes may not persist');
+    return false;
+  }
 }
 
 async function savePricingDB(includeHistory=false,scope='internal'){
@@ -2764,10 +2769,15 @@ function closePurchaseSummary(){ document.getElementById('purchase_summary_modal
 async function commitPurchaseBatch(printAfter=false){
   if(!purchaseBatch.length||purchaseCommitBusy) return;
   purchaseCommitBusy=true;
+  const previousDb=JSON.parse(JSON.stringify(db));
+  let persisted=false;
+  const restoreLocalLedger=()=>{
+    Object.keys(db).forEach(key=>delete db[key]);
+    Object.assign(db,JSON.parse(JSON.stringify(previousDb)));
+  };
   try{
     captureBuyingDraftForm();
     const customer=purchaseCustomer();
-    const previousCustomerCount=db.customers.length,previousStock=JSON.parse(JSON.stringify(db.stock)),previousInventoryPools=JSON.parse(JSON.stringify(db.inventoryPools));
     let customerId=customer.id;
     if(customer.isNew){ customerId=uid('cust'); db.customers.push({id:customerId,name:customer.name,contact:'',notes:''}); }
     const batchId=uid('buy');
@@ -2778,7 +2788,8 @@ async function commitPurchaseBatch(printAfter=false){
     const autoPooledCount=autoPoolMatchingScrapboardInventory(recordedItems.map(item=>item.id));
     const count=purchaseBatch.length,total=roundMoney(purchaseBatch.reduce((sum,item)=>sum+Number(item.payout),0));
     const saved=await saveDB();
-    if(!saved){ db.customers.splice(previousCustomerCount); db.stock=previousStock;db.inventoryPools=previousInventoryPools;toast('The purchase was not recorded. Your payout draft is still saved.'); return; }
+    if(!saved){ restoreLocalLedger(); toast('The purchase was not recorded. Your payout draft is still saved.'); return; }
+    persisted=true;
     purchaseBatch=[]; closePurchaseSummary();
     // Reset the form synchronously before rebuilding metal/grade controls.
     // The draft DELETE continues in the background without delaying the UI.
@@ -2791,6 +2802,10 @@ async function commitPurchaseBatch(printAfter=false){
       else refreshBuying();
     }else refreshBuying();
     toast(`${count} items recorded · ${fmtMoney(total)}${autoPooledCount?` · ${autoPooledCount} matching inventory records automatically pooled`:''}`);
+  }catch(error){
+    if(!persisted) restoreLocalLedger();
+    console.error('Purchase commit failed',error);
+    toast(persisted?'Purchase saved, but the receipt view could not be opened.':`The purchase was not recorded — ${String(error?.message||'please try again')}. Your payout draft is still saved.`);
   } finally { purchaseCommitBusy=false; }
 }
 

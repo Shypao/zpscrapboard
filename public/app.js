@@ -223,7 +223,8 @@ async function saveDB() {
     }
     catch (e) {
         console.error('Save failed', e);
-        toast('Could not save — changes may not persist');
+        const detail = String(e?.message || '').trim();
+        toast(detail ? `Could not save — ${detail}` : 'Could not save — changes may not persist');
         return false;
     }
 }
@@ -3669,10 +3670,15 @@ async function commitPurchaseBatch(printAfter = false) {
     if (!purchaseBatch.length || purchaseCommitBusy)
         return;
     purchaseCommitBusy = true;
+    const previousDb = JSON.parse(JSON.stringify(db));
+    let persisted = false;
+    const restoreLocalLedger = () => {
+        Object.keys(db).forEach(key => delete db[key]);
+        Object.assign(db, JSON.parse(JSON.stringify(previousDb)));
+    };
     try {
         captureBuyingDraftForm();
         const customer = purchaseCustomer();
-        const previousCustomerCount = db.customers.length, previousStock = JSON.parse(JSON.stringify(db.stock)), previousInventoryPools = JSON.parse(JSON.stringify(db.inventoryPools));
         let customerId = customer.id;
         if (customer.isNew) {
             customerId = uid('cust');
@@ -3687,12 +3693,11 @@ async function commitPurchaseBatch(printAfter = false) {
         const count = purchaseBatch.length, total = roundMoney(purchaseBatch.reduce((sum, item) => sum + Number(item.payout), 0));
         const saved = await saveDB();
         if (!saved) {
-            db.customers.splice(previousCustomerCount);
-            db.stock = previousStock;
-            db.inventoryPools = previousInventoryPools;
+            restoreLocalLedger();
             toast('The purchase was not recorded. Your payout draft is still saved.');
             return;
         }
+        persisted = true;
         purchaseBatch = [];
         closePurchaseSummary();
         // Reset the form synchronously before rebuilding metal/grade controls.
@@ -3710,6 +3715,12 @@ async function commitPurchaseBatch(printAfter = false) {
         else
             refreshBuying();
         toast(`${count} items recorded · ${fmtMoney(total)}${autoPooledCount ? ` · ${autoPooledCount} matching inventory records automatically pooled` : ''}`);
+    }
+    catch (error) {
+        if (!persisted)
+            restoreLocalLedger();
+        console.error('Purchase commit failed', error);
+        toast(persisted ? 'Purchase saved, but the receipt view could not be opened.' : `The purchase was not recorded — ${String(error?.message || 'please try again')}. Your payout draft is still saved.`);
     }
     finally {
         purchaseCommitBusy = false;
