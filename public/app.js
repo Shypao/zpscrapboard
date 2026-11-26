@@ -1394,8 +1394,14 @@ function todayPurchaseMetalSummary(purchases, metal) {
         payout: items.reduce((sum, item) => sum + Number(item.payout || 0), 0)
     };
 }
-function purchaseTransactionCount(purchases) {
-    return new Set(purchases.map(item => String(item.batchId || item.id))).size;
+function purchaseQuantityTotalsText(purchases, fallback = '0.00 kg') {
+    const totals = new Map();
+    purchases.forEach(item => {
+        const unit = item?.unit || 'kg';
+        const quantity = Number(item?.purchaseQuantity ?? (unit === 'kg' ? Number(item?.netWeight || 0) / 1000 : Number(item?.netWeight || 0)));
+        totals.set(unit, (totals.get(unit) || 0) + quantity);
+    });
+    return ['pc', 'kg'].filter(unit => totals.has(unit)).map(unit => `${totals.get(unit).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 3 })} ${unit}`).join(' · ') || fallback;
 }
 function inventoryQuantityUnit(item) {
     if (item?.itemType === 'Jewelry')
@@ -1458,9 +1464,9 @@ function renderDashboard() {
   <section class="block">
     <h2 class="block-title">Today &amp; this month</h2>
     <div class="stat-row">
-      <div class="stat"><div class="label">Scrapboard purchases today</div><div class="value">${purchaseTransactionCount(pToday)}</div><div class="sub">${fmtMoney(payoutToday)} total payout · ${pToday.length} item${pToday.length === 1 ? '' : 's'}</div></div>
+            <div class="stat"><div class="label">Scrapboard quantity bought today</div><div class="value">${purchaseQuantityTotalsText(pToday)}</div><div class="sub">${fmtMoney(payoutToday)} total payout · ${new Set(pToday.map(item => String(item.batchId || item.id))).size} purchase${new Set(pToday.map(item => String(item.batchId || item.id))).size === 1 ? '' : 's'}</div></div>
       <div class="stat"><div class="label">${esc(monthLabel)} inventory value</div><div class="value">${fmtMoney(inventoryAmountMonth)}</div><div class="sub">${inventoryMonth.length} active item${inventoryMonth.length === 1 ? '' : 's'} · ${fmtWeight(inventoryWeightMonth)}</div></div>
-      <div class="stat"><div class="label">Buying transactions this month</div><div class="value">${purchaseTransactionCount(pMonth)}</div><div class="sub">${fmtMoney(payoutMonth)} total payout · ${pMonth.length} item${pMonth.length === 1 ? '' : 's'}</div></div>
+            <div class="stat"><div class="label">Scrapboard quantity bought this month</div><div class="value">${purchaseQuantityTotalsText(pMonth)}</div><div class="sub">${fmtMoney(payoutMonth)} total payout · ${new Set(pMonth.map(item => String(item.batchId || item.id))).size} purchase${new Set(pMonth.map(item => String(item.batchId || item.id))).size === 1 ? '' : 's'}</div></div>
       ${isAdmin() ? `<div class="stat"><div class="label">Sales &amp; release margin (month)</div><div class="value">${fmtMoney(liqMargin)}</div><div class="sub">${liqMonth.length} batch(es) released</div></div>
       <div class="stat"><div class="label">Direct sales margin (month)</div><div class="value">${fmtMoney(retailMargin)}</div><div class="sub">${retailMonth.length} item(s) sold</div></div>` : ''}
     </div>
