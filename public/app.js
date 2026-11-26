@@ -1394,6 +1394,9 @@ function todayPurchaseMetalSummary(purchases, metal) {
         payout: items.reduce((sum, item) => sum + Number(item.payout || 0), 0)
     };
 }
+function purchaseTransactionCount(purchases) {
+    return new Set(purchases.map(item => String(item.batchId || item.id))).size;
+}
 function inventoryQuantityUnit(item) {
     if (item?.itemType === 'Jewelry')
         return 'pc';
@@ -1455,9 +1458,9 @@ function renderDashboard() {
   <section class="block">
     <h2 class="block-title">Today &amp; this month</h2>
     <div class="stat-row">
-      <div class="stat"><div class="label">Scrapboard bought today</div><div class="value">${pToday.length}</div><div class="sub">${fmtMoney(payoutToday)} total payout</div></div>
+      <div class="stat"><div class="label">Scrapboard purchases today</div><div class="value">${purchaseTransactionCount(pToday)}</div><div class="sub">${fmtMoney(payoutToday)} total payout · ${pToday.length} item${pToday.length === 1 ? '' : 's'}</div></div>
       <div class="stat"><div class="label">${esc(monthLabel)} inventory value</div><div class="value">${fmtMoney(inventoryAmountMonth)}</div><div class="sub">${inventoryMonth.length} active item${inventoryMonth.length === 1 ? '' : 's'} · ${fmtWeight(inventoryWeightMonth)}</div></div>
-      <div class="stat"><div class="label">Buying transactions this month</div><div class="value">${pMonth.length}</div><div class="sub">${fmtMoney(payoutMonth)} total payout</div></div>
+      <div class="stat"><div class="label">Buying transactions this month</div><div class="value">${purchaseTransactionCount(pMonth)}</div><div class="sub">${fmtMoney(payoutMonth)} total payout · ${pMonth.length} item${pMonth.length === 1 ? '' : 's'}</div></div>
       ${isAdmin() ? `<div class="stat"><div class="label">Sales &amp; release margin (month)</div><div class="value">${fmtMoney(liqMargin)}</div><div class="sub">${liqMonth.length} batch(es) released</div></div>
       <div class="stat"><div class="label">Direct sales margin (month)</div><div class="value">${fmtMoney(retailMargin)}</div><div class="sub">${retailMonth.length} item(s) sold</div></div>` : ''}
     </div>

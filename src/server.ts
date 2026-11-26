@@ -581,9 +581,34 @@ async function saveStaffAdditions(candidate: LedgerState, user: AuthUser): Promi
   for (const metal of Object.keys(permittedGrades)) nextPricing[metal].overrides = requestedOverrides[metal];
   const currentCustomers = new Map(current.customers.map(record => [record.id, record]));
   const currentStock = new Map(current.stock.map(record => [record.id, record]));
-  if (current.customers.some(record => !candidate.customers.some(item => item.id === record.id && unchangedRecord(item, record))) ||
-      current.stock.some(record => !candidate.stock.some(item => item.id === record.id && unchangedRecord(item, record)))) {
+  if (current.customers.some(record => !candidate.customers.some(item => item.id === record.id && unchangedRecord(item, record)))) {
     throw new Error('Staff cannot edit or remove existing records');
+  }
+  // Buying can automatically attach a new Scrapboard purchase to an existing
+  // automatic pool. That changes only the pool link/status on existing stock
+  // rows and the bookkeeping fields on the automatic pool itself. Keep all
+  // other staff edits to existing records blocked.
+  const autoPoolStockFields = new Set(['status', 'inventoryPoolId']);
+  for (const record of current.stock) {
+    const next = candidate.stock.find(item => item.id === record.id);
+    if (!next) throw new Error('Staff cannot edit or remove existing records');
+    const changed = Object.keys({ ...record, ...next }).filter(key => JSON.stringify(record[key]) !== JSON.stringify(next[key]));
+    if (changed.length && (!changed.every(key => autoPoolStockFields.has(key)) || next.status !== 'Available' || !next.inventoryPoolId)) {
+      throw new Error('Staff cannot edit or remove existing records');
+    }
+  }
+  const currentPools = new Map(current.inventoryPools.map(record => [record.id, record]));
+  const autoPoolFields = new Set(['itemIds', 'originalItems', 'originalWeight', 'originalCost', 'remainingWeight', 'remainingCost', 'status', 'updatedAt']);
+  for (const record of current.inventoryPools) {
+    const next = candidate.inventoryPools.find(item => item.id === record.id);
+    if (!next) throw new Error('Staff cannot edit or remove existing records');
+    const changed = Object.keys({ ...record, ...next }).filter(key => JSON.stringify(record[key]) !== JSON.stringify(next[key]));
+    if (changed.length && (!record.automatic || !next.automatic || !changed.every(key => autoPoolFields.has(key)))) {
+      throw new Error('Staff cannot edit or remove existing records');
+    }
+  }
+  if (candidate.inventoryPools.some(pool => !currentPools.has(pool.id) && pool.automatic !== true)) {
+    throw new Error('Staff cannot create manual inventory pools');
   }
   const newCustomers = candidate.customers.filter(record => !currentCustomers.has(record.id));
   // Staff names are audit data, not user-editable purchase fields. Always
@@ -610,13 +635,16 @@ async function saveStaffAdditions(candidate: LedgerState, user: AuthUser): Promi
       throw new Error('Buying-rate overrides are locked by an administrator');
     }
   }
-  await dbBatch([
-    ...newCustomers.map(record => ({ sql: 'INSERT INTO customers (id, data) VALUES (?, ?)', args: [record.id, JSON.stringify(record)] })),
-    ...newStock.map(record => ({ sql: 'INSERT INTO inventory (id, data) VALUES (?, ?)', args: [record.id, JSON.stringify(record)] })),
-    { sql: "INSERT INTO settings (key, value) VALUES ('pricing', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", args: [JSON.stringify(nextPricing)] },
-    { sql: "INSERT INTO settings (key, value) VALUES ('ledger_revision', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", args: [String(Number(current._revision||0)+1)] }
-  ]);
-  candidate._revision=Number(current._revision||0)+1;
+  candidate.pricing = nextPricing as unknown as PricingSettings;
+  // Staff cannot mutate unrelated ledger stores through a full-state client
+  // snapshot. Preserve the server copy and persist only new purchases plus
+  // the narrowly-validated automatic-pool changes above.
+  candidate.liquidationBatches = current.liquidationBatches;
+  candidate.liquidations = current.liquidations;
+  candidate.refiningBatches = current.refiningBatches;
+  candidate.retailSales = current.retailSales;
+  candidate.pricingHistory = current.pricingHistory;
+  await saveState(candidate);
 }
 
 function buyingDraftKey(user: AuthUser): string {
