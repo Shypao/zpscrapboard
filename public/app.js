@@ -3692,9 +3692,10 @@ async function commitPurchaseBatch(printAfter = false) {
         const autoPooledCount = autoPoolMatchingScrapboardInventory(recordedItems.map(item => item.id));
         const count = purchaseBatch.length, total = roundMoney(purchaseBatch.reduce((sum, item) => sum + Number(item.payout), 0));
         const saved = await saveDB();
+        // saveDB already reports the server-side reason. Keep the draft
+        // available for retry instead of replacing that useful error.
         if (!saved) {
             restoreLocalLedger();
-            toast('The purchase was not recorded. Your payout draft is still saved.');
             return;
         }
         persisted = true;
