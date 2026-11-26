@@ -1216,12 +1216,9 @@
     color:var(--scrapboard-ink);
     text-shadow:0 1px 0 rgba(255,255,255,.55);
   }
-  .scrapboard-app #content>section,
-  .scrapboard-app #content>.block{
-    animation:scrapboard-rise .36s ease both;
-  }
-  .scrapboard-app #content>section:nth-child(2){animation-delay:.04s}
-  .scrapboard-app #content>section:nth-child(3){animation-delay:.08s}
+    /* Content is re-rendered while typing and switching controls. Keep page
+       updates stable instead of replaying an entrance animation on every key. */
+.scrapboard-app #content>section,.scrapboard-app #content>.block{animation:none!important;transition:none!important;}
   .scrapboard-app .stat,
   .scrapboard-app .inventory-breakdown-card,
   .scrapboard-app .inventory-daily-totals,
